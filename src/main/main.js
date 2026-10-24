@@ -1,6 +1,7 @@
 'use strict';
 const { app, BrowserWindow, dialog, ipcMain, shell, utilityProcess } = require('electron');
-const { spawn, execFile, execFileSync } = require('node:child_process');
+const { spawn, execFile } = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -37,7 +38,8 @@ function startHost() {
       const resolve = pending.get(m.id);
       if (resolve) { pending.delete(m.id); resolve(m.result); }
     } else if (m.type === 'progress') {
-      if (m.done) scanningRoot = null;
+      // Starting a new scan ends the old one with a done message; only the current root counts.
+      if (m.done && scanningRoot && m.root.toLowerCase() === scanningRoot.toLowerCase()) scanningRoot = null;
       if (win && !win.isDestroyed()) win.webContents.send('scan:progress', m);
     }
   });
@@ -107,13 +109,14 @@ function quickTargets() {
  * absolute drive path that Windows resolves to exactly itself: no '.' or '..' parts, no
  * names ending in a dot or a space; 8.3 short names fail the realpath check. Then the lock rules apply.
  */
-function refuseReason(p) {
+async function refuseReason(p) {
   if (typeof p !== 'string' || !/^[a-zA-Z]:\\[^/]*$/.test(p)) return 'path';
   const parts = p.slice(3).split('\\');
   if (parts.some(s => !s || s === '.' || s === '..' || /[. ]$/.test(s))) return 'path';
   if (DEMO) return lockReason(p);
   let real;
-  try { real = fs.realpathSync.native(p); } catch { return 'missing'; }
+  // Async, so a 50,000-file Temp does not freeze the window; it resolves like realpathSync.native.
+  try { real = await fs.promises.realpath(p); } catch { return 'missing'; }
   if (real.toLowerCase() !== p.toLowerCase()) return 'path';
   return lockReason(real);
 }
@@ -130,7 +133,7 @@ async function trashItems(items) {
   }
   let done = 0;
   for (const p of targets) {
-    const reason = refuseReason(p);
+    const reason = await refuseReason(p);
     if (reason) failed.push({ path: p, error: reason });
     else if (DEMO) moved.push(p);
     else {
@@ -194,15 +197,23 @@ ipcMain.handle('tree:search', (_e, p, filter) => ask({ type: 'search', path: p, 
 
 // After a complete scan: compare it with the snapshot of the previous scan of the same root,
 // then keep this scan's snapshot for next time. Returns null for a first scan.
-const snapshotFile = root => path.join(app.getPath('userData'), 'snapshots', encodeURIComponent(root.toLowerCase()) + '.json');
+// A hash keeps the file name short for any root; the root itself is stored inside.
+const snapshotFile = root => path.join(app.getPath('userData'), 'snapshots',
+  crypto.createHash('sha1').update(root.toLowerCase()).digest('hex') + '.json');
 ipcMain.handle('scan:changes', async (_e, root) => {
   if (DEMO || typeof root !== 'string') return null;
+  const file = snapshotFile(root);
   let prev = null;
-  try { prev = JSON.parse(await fs.promises.readFile(snapshotFile(root), 'utf8')); } catch { /* first scan of this root */ }
-  const r = await ask({ type: 'changes', prev });
+  try { prev = JSON.parse(await fs.promises.readFile(file, 'utf8')); } catch { /* first scan of this root */ }
+  if (prev && String(prev.root).toLowerCase() !== root.toLowerCase()) prev = null;
+  const r = await ask({ type: 'changes', root, prev });
   if (!r) return null;
-  await fs.promises.mkdir(path.dirname(snapshotFile(root)), { recursive: true });
-  await fs.promises.writeFile(snapshotFile(root), JSON.stringify({ root, time: Date.now(), ...r.snapshot }));
+  try {
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, JSON.stringify({ root, time: Date.now(), ...r.snapshot }));
+  } catch (e) {
+    console.error('snapshot not saved:', e.message);
+  }
   return r.diff && prev ? { since: prev.time, ...r.diff } : null;
 });
 ipcMain.handle('items:trash', (_e, items) => trashItems(items));
@@ -211,13 +222,13 @@ ipcMain.handle('shell:recycleBin', () => {
   if (DEMO) return;
   spawn('explorer.exe', ['shell:RecycleBinFolder'], { detached: true, stdio: 'ignore' }).unref();
 });
-ipcMain.handle('app:info', () => ({
+ipcMain.handle('app:info', async () => ({
   version: app.getVersion(),
   platform: process.platform,
   // A Turkish region or any Turkish preferred language opens the app in Turkish.
   locale: [app.getSystemLocale(), ...app.getPreferredSystemLanguages()].find(l => /^tr/i.test(l || ''))
     || app.getPreferredSystemLanguages()[0] || app.getLocale(),
-  admin: isAdmin(),
+  admin: await isAdmin(),
   autoScan: scanRequest(process.argv),
 }));
 
@@ -309,9 +320,13 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return next;
 });
 
+// Elevated means the process token has the High (or System) integrity level. whoami shows it
+// without needing any Windows service, and it runs async so the window never waits on it.
 function isAdmin() {
-  if (process.platform !== 'win32') return false;
-  try { execFileSync('net', ['session'], { stdio: 'ignore', windowsHide: true }); return true; } catch { return false; }
+  if (process.platform !== 'win32') return Promise.resolve(false);
+  return new Promise(resolve => {
+    execFile(path.join(system32(), 'whoami.exe'), ['/groups'], { windowsHide: true }, (err, out) => resolve(!err && /S-1-16-(12288|16384)\b/.test(out)));
+  });
 }
 
 // A --scan request: the folder to scan, or only the raw text when it cannot be scanned.

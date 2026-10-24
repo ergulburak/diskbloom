@@ -23,11 +23,18 @@ port.on('message', e => {
     case 'remove': reply(m.id, tree ? tree.removeMany(m.paths) : []); break;
     case 'children': reply(m.id, tree ? tree.childPaths(m.path) : []); break;
     case 'search': reply(m.id, tree ? tree.search(m.path, m.filter) : null); break;
-    case 'changes': reply(m.id, tree && current && current.done && !current.cancelled && !current.error ? tree.changes(m.prev) : null); break;
+    case 'changes': reply(m.id, finishedScanOf(m.root) ? tree.changes(m.prev) : null); break;
   }
 });
 
 function reply(id, result) { port.postMessage({ type: 'reply', id, result }); }
+
+// True when the tree holds a complete scan of `root`. A newer scan may have replaced it
+// before a request for the older one arrives.
+function finishedScanOf(root) {
+  return !!(tree && current && current.done && !current.cancelled && !current.error
+    && typeof root === 'string' && current.root.toLowerCase() === root.toLowerCase());
+}
 
 function progress() {
   if (!current) return;
@@ -97,7 +104,7 @@ async function nodeScan(scan, t) {
   const queue = [{ id: 0, dir: t.rootPath }];
   await new Promise(resolve => {
     const pump = () => {
-      if (current !== scan) return resolve();
+      if (current !== scan || scan.done) return resolve(); // a new scan, or Stop
       while (active < 32 && queue.length) {
         const job = queue.pop();
         active++;
