@@ -51,7 +51,9 @@ macOS-like look are core requirements, not polish.
 
 - Hidden space = the drive's used space minus the scanned total, shown only after a complete
   drive scan and only from 256 MB (or 0.2% of the drive) up, so cluster slack does not make noise.
-  The scanner counts logical sizes, so compressed or cloud-only files can hide part of the gap.
+  The scanner counts logical sizes and counts a hard-linked file (WinSxS, System32) once per link,
+  so the scanned total can be higher than the real use and the tile then stays away. Cloud-only
+  OneDrive files count as 0 bytes, because their data is not on the disk.
 - Diskbloom does not delete restore points or system files itself; the tools dialog opens the
   Windows tool that owns them. Turning hibernation off is the one setting it changes, after a second
   click and a UAC prompt.
@@ -60,7 +62,7 @@ macOS-like look are core requirements, not polish.
   (about 0.2 s for 1.3 million files) and returns only the largest 200 matches plus the count and total.
   A folder's age is the age of its newest file; a matching folder is listed once, not again for
   every folder inside it.
-- Each complete scan keeps a snapshot of the folders of 10 MB and up (about 0.7 MB for a full system
+- Each complete scan keeps a snapshot of the folders of 1 MB and up (about 3 MB for a full system
   drive) and compares it with the previous snapshot of the same root. Only changes of 50 MB and up
   are listed, and a parent is left out when one listed folder inside it explains 80% of its change.
   A rescan is the only trigger; there is no scheduled scan.
