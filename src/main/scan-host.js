@@ -61,7 +61,7 @@ function cancel() {
 function start(root, scannerPath, demo) {
   cancel();
   tree = new Tree(root);
-  const scan = current = { id: ++seq, root: tree.rootPath, started: Date.now(), done: false };
+  const scan = current = { id: ++seq, root: tree.rootView, started: Date.now(), done: false };
   scan.timer = setInterval(progress, 200);
 
   if (demo) {

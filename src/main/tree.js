@@ -9,6 +9,9 @@ const { lockReason } = require('../shared/protect');
 class Tree {
   constructor(rootPath) {
     this.rootPath = rootPath.replace(/[\\/]+$/, '') + '\\';
+    // How the root appears in views: a drive keeps its backslash ('C:\'), a folder has none
+    // ('C:\Users\me'), the same as every other path the renderer works with.
+    this.rootView = /^[a-z]:\\$/i.test(this.rootPath) ? this.rootPath : this.rootPath.slice(0, -1);
     this.root = makeDir(0, this.rootPath.slice(0, -1), null);
     this.dirs = [this.root];
     this.fileCount = 0;
@@ -94,9 +97,9 @@ class Tree {
   }
 
   dirNode(dir, depth, limits, level, minAbs) {
-    const path = dir.parent ? this.pathOf(dir) : this.rootPath;
+    const path = dir.parent ? this.pathOf(dir) : this.rootView;
     const node = {
-      kind: 'dir', name: dir.parent ? dir.name : this.rootPath.slice(0, -1), path,
+      kind: 'dir', name: dir.parent ? dir.name : this.rootPath.slice(0, -1).split('\\').pop(), path,
       size: dir.size, files: dir.files, items: dir.subdirs.length + dir.fileNames.length,
       error: dir.error || undefined, lock: lockReason(path),
     };

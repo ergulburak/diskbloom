@@ -78,3 +78,16 @@ test('entries that arrive for a removed folder are ignored', () => {
   assert.strictEqual(t.fileCount, 1);
   assert.strictEqual(t.errorCount, 0);
 });
+
+test('a folder root is shown without a trailing backslash', () => {
+  const t = new Tree('D:\\Games\\Steam\\');
+  new LineParser(t).feed('D\t1\t0\tsteamapps\nF\t1\t700\tbig.pak\nF\t0\t5\tsteam.exe\nX\n');
+  const v = t.view('D:\\Games\\Steam', 2);
+  assert.strictEqual(v.path, 'D:\\Games\\Steam');
+  assert.strictEqual(v.name, 'Steam');
+  assert.strictEqual(v.size, 705);
+  assert.deepStrictEqual(v.children.map(c => c.path), ['D:\\Games\\Steam\\steamapps', 'D:\\Games\\Steam\\steam.exe']);
+  assert.strictEqual(t.view('d:\\games\\steam\\').path, 'D:\\Games\\Steam');
+  assert.strictEqual(t.view('D:\\Games'), null);
+  assert.deepStrictEqual(t.childPaths('D:\\Games\\Steam'), ['D:\\Games\\Steam\\steamapps', 'D:\\Games\\Steam\\steam.exe']);
+});
