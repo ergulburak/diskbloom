@@ -102,6 +102,10 @@ kbd { font: inherit; font-size: 10.5px; padding: 1px 6px; border-radius: 6px; bo
 .qitem.in { color: #ffc4da; }
 .qitem.zero { opacity: .4; cursor: default; }
 .qempty { padding: 6px 9px; color: var(--muted); }
+.lbl-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.lbl-act { border: none; background: none; padding: 0; cursor: pointer; color: var(--muted); font-size: 10px; letter-spacing: inherit;
+  text-transform: inherit; transition: color .2s; }
+.lbl-act:hover { color: #ffc4da; }
 body:not(.scanned) .after-scan { display: none; }
 .types { display: flex; flex-direction: column; gap: 2px; overflow: auto; min-height: 0; flex: 0 1 auto; }
 .titem { padding: 6px 9px 7px; border-radius: 10px; cursor: pointer; transition: background .2s; }
@@ -241,6 +245,21 @@ body:not(.scanned) .after-scan { display: none; }
 .ftip .bar2 > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #9ab8ff, #ff9ec4); }
 .ftip .hint { font-size: 11px; margin-top: 8px; color: var(--muted); }
 .ftip .warn { font-size: 11px; margin-top: 8px; color: var(--peach); }
+.ftip .why { font-size: 11px; margin-top: 8px; color: var(--muted); line-height: 1.45; }
+
+/* the hidden-space tile: hatched, so it never reads as a real folder */
+.t.hidden-space { --c: #b9b3cf; border-style: dashed; cursor: help;
+  background: repeating-linear-gradient(135deg, rgba(185,179,207,.13) 0 7px, rgba(185,179,207,.04) 7px 14px); }
+
+/* Windows tools dialog */
+.dialog.tools { width: 460px; }
+.tlist { display: flex; flex-direction: column; gap: 6px; margin: 14px 0 16px; }
+.tool { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 13px; background: rgba(255,255,255,.05); }
+.tool .ico { font-size: 18px; flex: none; }
+.tool .main { flex: 1; min-width: 0; }
+.tool .nm { font-weight: 600; }
+.tool .d { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.tool .btn { flex: none; }
 
 /* ---------- toast & modal ---------- */
 .toast { position: fixed; left: 50%; bottom: 44px; z-index: 60; transform: translate(-50%, 24px); opacity: 0; pointer-events: none;

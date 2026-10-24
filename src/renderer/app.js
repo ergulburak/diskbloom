@@ -48,6 +48,7 @@ const TYPE_ICON = {
 };
 function icon(n) {
   if (n.kind === 'rest') return '';
+  if (n.kind === 'hidden') return '🕳️';
   if (n.kind === 'dir') return '📁';
   return TYPE_ICON[n.type] || '📄';
 }
@@ -216,7 +217,8 @@ function render(mode) {
   const v = state.view;
   if (v) {
     state.nodes.set(v.path, { node: v, parent: null });
-    if (v.kind === 'dir' && v.children) draw(v, 0, 0, tm.clientWidth, tm.clientHeight, 0, null);
+    const hidden = hiddenNode();
+    if (v.kind === 'dir' && v.children) draw(hidden ? { ...v, children: [...v.children, hidden] } : v, 0, 0, tm.clientWidth, tm.clientHeight, 0, null);
   }
   marks();
   highlight();
@@ -224,6 +226,17 @@ function render(mode) {
   if (mode === 'flip') flip(old);
   renderCrumbs();
   renderTypes();
+}
+
+// Space the drive reports as used that no scanned file explains: shadow copies and restore
+// points, folders that could not be read, file system metadata. Shown as one tile at the
+// top of a finished drive scan, when it is big enough to matter.
+function hiddenNode() {
+  const d = currentDrive(), p = state.progress, v = state.view;
+  if (!d || !p || !p.done || p.cancelled || p.error || !isDrive(state.root) || !v || state.path !== state.root) return null;
+  const gap = d.total - d.free - v.size;
+  if (gap < Math.max(256 * 2 ** 20, d.total * 0.002)) return null;
+  return { kind: 'hidden', name: t('hidden'), path: state.root + '\u0000hidden', size: gap };
 }
 
 function draw(node, x, y, w, h, depth, color) {
@@ -246,10 +259,12 @@ function draw(node, x, y, w, h, depth, color) {
     } else {
       el.classList.add('t');
       if (c.kind === 'rest') el.classList.add('rest');
+      if (c.kind === 'hidden') el.classList.add('hidden-space');
       if (rw < 22 || rh < 22) el.classList.add('tiny');
+      const addable = c.kind !== 'rest' && c.kind !== 'hidden';
       if (rw > 56 && rh > 34) {
-        el.innerHTML = `<span class="n">${icon(c)} ${esc(label(c))}</span><span class="s">${fmtBytes(c.size)}</span>${c.kind === 'rest' ? '' : '<b class="add">+</b>'}`;
-      } else if (rw > 24 && rh > 24 && c.kind !== 'rest') {
+        el.innerHTML = `<span class="n">${icon(c)} ${esc(label(c))}</span><span class="s">${fmtBytes(c.size)}</span>${addable ? '<b class="add">+</b>' : ''}`;
+      } else if (rw > 24 && rh > 24 && addable) {
         el.innerHTML = '<b class="add">+</b>';
       }
       tm.appendChild(el);
@@ -368,6 +383,11 @@ function tipHtml(n, parent) {
   if (n.kind === 'rest') {
     return `<div class="tt">${esc(label(n))}</div><div class="kv" style="margin-top:6px"><span>${t('size')}</span><span>${fmtBytes(n.size)}</span></div><div class="hint">${t('hintRest')}</div>`;
   }
+  if (n.kind === 'hidden') {
+    return `<div class="tt">${icon(n)} ${esc(n.name)}</div>
+      <div class="kv" style="margin-top:6px"><span>${t('size')}</span><span>${fmtBytes(n.size)}</span></div>
+      <div class="why">${t('hiddenWhy')}</div><div class="hint">${t('hintHidden')}</div>`;
+  }
   const total = currentDrive()?.total || state.view?.size || 1;
   const share = n.size / total * 100;
   let h = `<div class="tt">${icon(n)} ${esc(n.name)}</div><div class="tp">${esc(n.path)}</div>
@@ -416,6 +436,7 @@ function shake(el) {
 function toggle(node) {
   if (!node || node.kind === 'rest') return;
   const el = elFor(node.path);
+  if (node.kind === 'hidden') { shake(el); toast('🕳️ ' + t('hiddenToast')); return; }
   if (node.lock) { shake(el); toast('🔒 ' + t('lock_' + node.lock)); return; }
   const key = lower(node.path);
   if (state.basket.has(key)) state.basket.delete(key);
@@ -486,6 +507,48 @@ async function openModal() {
   setTimeout(() => $('mYes').focus(), 50);
 }
 function closeModal() { $('modal').classList.remove('on'); }
+
+// ---------- Windows tools ----------
+// Windows' own tools for the space Diskbloom cannot move: system files, restore points,
+// the hibernation file. The dialog opens from the side panel or the hidden-space tile.
+const TOOLS = [
+  { id: 'elevate', ico: '🛡️', show: () => !state.admin && !!state.root },
+  { id: 'cleanmgr', ico: '🧹' },
+  { id: 'storage', ico: '♻️' },
+  { id: 'protection', ico: '⏪' },
+  { id: 'hibernate', ico: '💤', show: info => info.hibernate > 0 },
+];
+
+async function openTools(fromHidden) {
+  const info = await api.toolInfo();
+  const hidden = fromHidden && hiddenNode();
+  $('toolsSub').textContent = hidden ? t('hiddenSub', { size: fmtBytes(hidden.size) }) : t('toolsSub');
+  $('toolList').innerHTML = TOOLS.filter(x => !x.show || x.show(info)).map(x => `<div class="tool"><span class="ico">${x.ico}</span>
+    <div class="main"><div class="nm">${t('tool_' + x.id)}</div><div class="d">${t('tool_' + x.id + '_d', { size: fmtBytes(info.hibernate) })}</div></div>
+    <button class="btn soft sm" data-tool="${x.id}">${t(x.id === 'hibernate' ? 'turnOff' : 'open')}</button></div>`).join('');
+  hideTip();
+  $('tools').classList.add('on');
+}
+function closeTools() { $('tools').classList.remove('on'); }
+
+$('toolList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-tool]');
+  if (!b || b.disabled) return;
+  const id = b.dataset.tool;
+  if (id === 'elevate') { api.elevate(state.root); return; }
+  if (id !== 'hibernate') { api.openTool(id); return; }
+  // Hibernation is a system setting: the first click asks, the second one does it.
+  if (!b.classList.contains('pri')) { b.classList.replace('soft', 'pri'); b.textContent = t('sure'); return; }
+  b.disabled = true;
+  b.textContent = t('working');
+  const ok = await api.hibernateOff();
+  closeTools();
+  if (ok && state.root) toast('💤 ' + t('hibernateDone'), { label: t('rescan'), fn: () => startScan(state.root) });
+  else toast(ok ? '💤 ' + t('hibernateDone') : '⚠ ' + t('hibernateFailed'));
+});
+$('toolsBtn').addEventListener('click', () => openTools(false));
+$('toolsClose').addEventListener('click', closeTools);
+$('tools').addEventListener('click', e => { if (e.target === $('tools')) closeTools(); });
 
 async function confirmTrash() {
   if (state.busy) return;
@@ -559,7 +622,8 @@ tm.addEventListener('dblclick', e => {
   if (!el || e.target.closest('.add')) return;
   const entry = state.nodes.get(el.dataset.path);
   // The "+N small items" tile opens the folder it belongs to, where those items get room.
-  if (entry) zoomIn(entry.node.kind === 'rest' ? entry.parent : entry.node);
+  if (entry && entry.node.kind === 'hidden') openTools(true);
+  else if (entry) zoomIn(entry.node.kind === 'rest' ? entry.parent : entry.node);
 });
 tm.addEventListener('contextmenu', e => {
   const el = e.target.closest('[data-path]');
@@ -647,12 +711,16 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !state.busy) closeModal();
     return;
   }
+  if ($('tools').classList.contains('on')) {
+    if (e.key === 'Escape') closeTools();
+    return;
+  }
   if (!state.view) return;
   const sel = state.sel && state.nodes.get(state.sel);
   if ((e.key === ' ' || e.key === 'Delete') && sel) { e.preventDefault(); toggle(sel.node); }
   else if ((e.key === 'Escape' || e.key === 'Backspace') && state.path !== state.root) { e.preventDefault(); zoomOut(parentPath(state.path)); }
-  else if (e.key === 'Enter' && sel) { e.preventDefault(); zoomIn(sel.node); }
-  else if ((e.key === 'e' || e.key === 'E') && sel && sel.node.kind !== 'rest') api.reveal(sel.node.path);
+  else if (e.key === 'Enter' && sel) { e.preventDefault(); sel.node.kind === 'hidden' ? openTools(true) : zoomIn(sel.node); }
+  else if ((e.key === 'e' || e.key === 'E') && sel && (sel.node.kind === 'dir' || sel.node.kind === 'file')) api.reveal(sel.node.path);
 });
 
 let resizeTimer;
@@ -673,7 +741,8 @@ api.onProgress(m => {
   renderStatus();
   if (m.done && !wasDone) {
     clearTimeout(refreshTimer); refreshTimer = null;
-    refresh('flip');
+    // Fresh free space first: the hidden-space tile compares it with the scanned total.
+    loadDrives().then(() => refresh('flip'));
     refreshQuickSizes();
     if (!m.cancelled && !m.error) toast(`✓ ${t('done')} · ${secs(m.elapsed)} · ${num(m.files)} ${t('files')}`);
     if (m.error) toast('⚠ ' + esc(m.error));

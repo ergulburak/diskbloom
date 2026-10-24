@@ -1,6 +1,6 @@
 'use strict';
 const { app, BrowserWindow, dialog, ipcMain, shell, utilityProcess } = require('electron');
-const { spawn, execFileSync } = require('node:child_process');
+const { spawn, execFile, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -204,6 +204,35 @@ ipcMain.handle('app:info', () => ({
     || app.getPreferredSystemLanguages()[0] || app.getLocale(),
   admin: isAdmin(),
   autoScan: scanRequest(process.argv),
+}));
+
+const system32 = () => path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+// hiberfil.sys is open by Windows, so stat() fails on it; a directory listing still has its size.
+ipcMain.handle('tool:info', () => new Promise(resolve => {
+  if (DEMO || process.platform !== 'win32') return resolve({ hibernate: 0 });
+  const root = `${process.env.SystemDrive || 'C:'}\\`;
+  execFile('powershell.exe', ['-NoProfile', '-Command', `(Get-ChildItem -LiteralPath '${root}' -Force -Filter hiberfil.sys).Length`],
+    { windowsHide: true }, (err, out) => resolve({ hibernate: err ? 0 : Number(String(out).trim()) || 0 }));
+}));
+// Windows' own cleanup tools. openPath goes through the shell, so a tool that needs
+// administrator rights gets its UAC prompt.
+ipcMain.handle('tool:open', (_e, id) => {
+  if (DEMO) return false;
+  if (id === 'cleanmgr') shell.openPath(path.join(system32(), 'cleanmgr.exe'));
+  else if (id === 'protection') shell.openPath(path.join(system32(), 'SystemPropertiesProtection.exe'));
+  else if (id === 'storage') shell.openExternal('ms-settings:storagesense');
+  else return false;
+  return true;
+});
+// Turns hibernation (and with it Fast Startup) off, which deletes hiberfil.sys. powercfg needs
+// administrator rights, so Windows asks with a UAC prompt. Resolves true when powercfg succeeded.
+ipcMain.handle('tool:hibernateOff', () => new Promise(resolve => {
+  if (DEMO) return resolve(false);
+  const ps = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command',
+    "$p = Start-Process -FilePath powercfg.exe -ArgumentList '/hibernate','off' -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode"],
+  { windowsHide: true });
+  ps.on('exit', code => resolve(code === 0));
+  ps.on('error', () => resolve(false));
 }));
 
 // Restarts the app elevated (UAC prompt) and scans `root` again, so folders that need

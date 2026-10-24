@@ -26,7 +26,7 @@
       <div class="lbl" data-i18n="drives"></div>
       <div class="drives" id="drives"></div>
       <button class="btn soft sm pick" data-act="pick">📁 <span data-i18n="pickFolder"></span></button>
-      <div class="lbl" data-i18n="quickClean"></div>
+      <div class="lbl lbl-row"><span data-i18n="quickClean"></span><button class="lbl-act" id="toolsBtn">🛠️ <span data-i18n="toolsShort"></span></button></div>
       <div class="quick" id="quick"></div>
       <div class="lbl after-scan" data-i18n="fileTypes"></div>
       <div class="types after-scan" id="types"></div>
@@ -70,6 +70,14 @@
       <div class="muted" id="mSub"></div>
       <ul id="mList"></ul>
       <div class="dialog-actions"><button class="btn soft" id="mNo" data-i18n="cancel"></button><button class="btn pri" id="mYes" data-i18n="move"></button></div>
+    </div>
+  </div>
+  <div class="modal" id="tools">
+    <div class="dialog tools">
+      <div class="dialog-title" data-i18n="toolsTitle"></div>
+      <div class="muted" id="toolsSub"></div>
+      <div class="tlist" id="toolList"></div>
+      <div class="dialog-actions"><button class="btn soft" id="toolsClose" data-i18n="close"></button></div>
     </div>
   </div>
 
