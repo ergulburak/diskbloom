@@ -56,8 +56,13 @@ macOS-like look are core requirements, not polish.
   Windows tool that owns them. Turning hibernation off is the one setting it changes, after a second
   click and a UAC prompt.
 
+- The scanner sends each file's last write time. Find runs on the scan tree in the scan process
+  (about 0.2 s for 1.3 million files) and returns only the largest 200 matches plus the count and total.
+  A folder's age is the age of its newest file; a matching folder is listed once, not again for
+  every folder inside it.
+
 ## Not in this version
 
 - Emptying the Recycle Bin from the app, permanent delete.
 - Reading the NTFS MFT directly (WizTree-style), which would need administrator rights.
-- Search, duplicate finding, scheduled scans, auto-update, code signing.
+- Duplicate finding, scheduled scans, auto-update, code signing.

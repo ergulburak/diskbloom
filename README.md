@@ -21,6 +21,7 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 - **The map grows while it scans.** You can start exploring before the scan is finished.
 - **Zoom into any folder.** Double-click a tile and the map flies into it. Press <kbd>Esc</kbd> or use the path pills to go back.
 - **File types.** The side panel lists what fills the open folder: video, images, audio, archives, disk images, programs, documents, code and other. Click a type and only its tiles stay bright on the map.
+- **Find and largest files.** <kbd>Ctrl</kbd>+<kbd>F</kbd> lists the largest files in the open folder. Filter by name or a pattern (`*.iso`), type, size and age, or list folders where nothing changed for years.
 - **Floating details.** A glass tooltip follows the mouse with size, item and file counts, and the share of the parent folder and the disk.
 - **Cleanup basket.** Right-click tiles (or press <kbd>+</kbd>) to collect files and folders from anywhere on the drive, then move them all at once.
 - **Safe by design.**
@@ -43,6 +44,7 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 | Action | Mouse | Keyboard |
 | --- | --- | --- |
 | Scan a folder | *Pick a folder…*, or right-click it in Explorer | |
+| Find files or old folders | *Find* in the title bar | <kbd>Ctrl</kbd>+<kbd>F</kbd> |
 | Light up one file type | Click it under *File types* (click again to turn it off) | |
 | Select a tile | Click | |
 | Open a folder | Double-click | <kbd>Enter</kbd> |
