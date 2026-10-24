@@ -106,6 +106,7 @@ try {
 } finally {
   try { await c?.send('Runtime.evaluate', { expression: 'window.close()' }); } catch { /* already gone */ }
   await sleep(500);
+  c?.close();
   app.kill();
   fs.rmSync(testDir, { recursive: true, force: true });
 }
