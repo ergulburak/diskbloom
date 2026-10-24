@@ -11,7 +11,7 @@ const state = {
   drives: [],
   quick: [],
   quickSizes: new Map(),
-  root: null,          // scanned drive root, e.g. 'C:\'
+  root: null,          // scanned drive ('C:\') or folder ('C:\Users\me')
   path: null,          // folder shown in the treemap
   view: null,          // snapshot from the scanner for `path`
   nodes: new Map(),    // drawn path -> { node, parent }
@@ -61,7 +61,10 @@ function parentPath(p) {
   const par = p.slice(0, i);
   return /^[a-z]:$/i.test(par) ? par + '\\' : par;
 }
-function currentDrive() { return state.drives.find(d => state.root && lower(d.root) === lower(state.root)); }
+const isDrive = p => /^[a-z]:\\$/i.test(p);
+const baseName = p => p.replace(/\\$/, '').split('\\').pop();
+// The drive that holds the scanned root, also when the root is a folder.
+function currentDrive() { return state.drives.find(d => state.root && lower(d.root) === lower(state.root.slice(0, 2) + '\\')); }
 function inBasket(p) { return state.basket.has(lower(p)); }
 function ancestorInBasket(p) {
   for (const item of state.basket.values()) if (isUnder(p, item.path)) return item;
@@ -90,7 +93,10 @@ function renderDrives() {
       <div class="row"><b>💾 ${esc(d.letter)}</b><span class="muted small">${pct(usedPct)}</span></div>
       <div class="meter${usedPct > 90 ? ' hot' : ''}"><div style="width:${usedPct}%"></div></div>
       <div class="muted small" style="margin-top:5px">${fmtBytes(used)} / ${fmtBytes(d.total)}</div></div>`;
-  }).join('');
+  }).join('') + (state.root && !isDrive(state.root)
+    ? `<div class="drive on" data-root="${esc(state.root)}" title="${esc(state.root)}">
+      <div class="row"><b>📁 ${esc(baseName(state.root))}</b></div><div class="muted small fpath">${esc(state.root)}</div></div>`
+    : '');
 }
 
 function renderDriveCards() {
@@ -113,12 +119,12 @@ function renderDriveCards() {
 
 // ---------- quick clean ----------
 function quickOnDrive() {
-  return state.root ? state.quick.filter(q => lower(q.path).startsWith(lower(state.root))) : [];
+  return state.root ? state.quick.filter(q => lower(q.path) === lower(state.root) || isUnder(q.path, state.root)) : [];
 }
 
 function renderQuick() {
   const list = quickOnDrive();
-  if (!state.root || !list.length) { $('quick').innerHTML = `<div class="qempty">${t('quickEmpty')}</div>`; return; }
+  if (!state.root || !list.length) { $('quick').innerHTML = `<div class="qempty">${t(state.root ? 'quickNone' : 'quickEmpty')}</div>`; return; }
   $('quick').innerHTML = list.map(q => {
     const size = state.quickSizes.get(q.id);
     return `<div class="qitem${inBasket(q.path) ? ' in' : ''}${size === 0 ? ' zero' : ''}" data-q="${esc(q.id)}"><span>${t('q_' + q.id)}</span>
@@ -136,14 +142,22 @@ async function refreshQuickSizes() {
 
 // ---------- scanning ----------
 async function startScan(root) {
+  // The folder may be gone since it was picked; the main process checks it again.
+  if (!(await api.scan(root))) { toast('⚠ ' + t('folderBad', { path: esc(root) })); return; }
   Object.assign(state, { root, path: root, view: null, sel: null, progress: { files: 0, bytes: 0, done: false, elapsed: 0, errors: 0 } });
   state.basket.clear();
   state.quickSizes.clear();
   document.body.classList.add('scanned');
   tm.innerHTML = '';
   renderDrives(); renderBasket(); renderQuick(); renderStatus(); renderCrumbs();
-  await api.scan(root);
   scheduleRefresh(true);
+}
+
+// A folder from the dialog, the command line or Explorer: { root } when it can be scanned, else { raw }.
+function requestScan(req) {
+  if (!req || state.busy) return;
+  if (req.root) startScan(req.root);
+  else toast('⚠ ' + t('folderBad', { path: esc(req.raw) }));
 }
 
 let refreshTimer = null;
@@ -274,7 +288,7 @@ function renderCrumbs() {
   const hidden = chain.length > 6 ? chain[chain.length - 5] : null;
   $('crumbs').innerHTML = shown.map((p, i) => (i ? '<span class="sep">›</span>' : '') + (p === null
     ? `<button class="pill" data-nav="${esc(hidden)}" title="${esc(hidden)}">…</button>`
-    : `<button class="pill${p === state.path ? ' on' : ''}" data-nav="${esc(p)}">${i ? esc(p.slice(p.lastIndexOf('\\') + 1)) : '💾 ' + esc(p.replace(/\\$/, ''))}</button>`)).join('');
+    : `<button class="pill${p === state.path ? ' on' : ''}" data-nav="${esc(p)}">${i ? esc(p.slice(p.lastIndexOf('\\') + 1)) : isDrive(p) ? '💾 ' + esc(p.replace(/\\$/, '')) : '📁 ' + esc(baseName(p))}</button>`)).join('');
 }
 
 const elFor = p => tm.querySelector(`[data-path="${CSS.escape(p)}"]`);
@@ -578,6 +592,9 @@ document.addEventListener('keydown', e => {
 let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => state.view && render(), 120); });
 
+document.querySelectorAll('[data-act="pick"]').forEach(b => b.addEventListener('click', async () => requestScan(await api.pickFolder())));
+api.onScanRequest(requestScan);
+
 api.onTrashProgress(m => {
   if (state.busy) $('mYes').textContent = `${t('moving')} ${num(m.done)} / ${num(m.total)}`;
 });
@@ -609,7 +626,7 @@ Promise.all([api.info(), api.settings()]).then(([i, settings]) => {
   state.admin = i.admin;
   setLang(settings.lang || (/^tr/i.test(i.locale || '') ? 'tr' : 'en'));
   rerenderAll();
-  if (i.autoScan) startScan(i.autoScan);
+  requestScan(i.autoScan);
 });
 
 function rerenderAll() {

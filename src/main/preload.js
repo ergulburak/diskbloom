@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('diskbloom', {
   quickTargets: () => ipcRenderer.invoke('quick:list'),
   scan: root => ipcRenderer.invoke('scan:start', root),
   cancelScan: () => ipcRenderer.invoke('scan:cancel'),
+  pickFolder: () => ipcRenderer.invoke('dialog:folder'),
   view: (path, depth) => ipcRenderer.invoke('tree:view', path, depth),
   trash: items => ipcRenderer.invoke('items:trash', items),
   reveal: path => ipcRenderer.invoke('shell:reveal', path),
@@ -18,4 +19,5 @@ contextBridge.exposeInMainWorld('diskbloom', {
   onProgress: fn => ipcRenderer.on('scan:progress', (_e, m) => fn(m)),
   onTrashProgress: fn => ipcRenderer.on('trash:progress', (_e, m) => fn(m)),
   onWindowState: fn => ipcRenderer.on('win:state', (_e, m) => fn(m)),
+  onScanRequest: fn => ipcRenderer.on('app:scan', (_e, m) => fn(m)),
 });

@@ -88,6 +88,8 @@ kbd { font: inherit; font-size: 10.5px; padding: 1px 6px; border-radius: 6px; bo
 .drive.on { background: rgba(255,255,255,.09); }
 .drive .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
 .drive b { font-size: 13px; }
+.drive .fpath { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -3px; }
+.side .pick { align-self: flex-start; margin: 2px 4px 0; }
 .meter { height: 6px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.1); position: relative; }
 .meter > div { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: linear-gradient(90deg, #9ab8ff, #ff9ec4); transition: width .7s var(--ease); }
 .meter.hot > div { background: linear-gradient(90deg, #ffb38a, #ff8fb0); }
@@ -132,6 +134,7 @@ kbd { font: inherit; font-size: 10.5px; padding: 1px 6px; border-radius: 6px; bo
 .ring .lbl2 { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font-weight: 700; font-size: 20px; }
 .ring .lbl2 small { display: block; font-size: 10.5px; font-weight: 500; color: var(--muted); }
 .dcard .btn { width: 100%; }
+.hero-pick { margin-top: 16px; animation: cardIn .6s var(--spring) .3s backwards; }
 
 /* ---------- treemap tiles ---------- */
 .t, .grp { position: absolute; color: var(--c); }

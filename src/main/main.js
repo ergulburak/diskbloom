@@ -1,14 +1,18 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, utilityProcess } = require('electron');
 const { spawn, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { lockReason } = require('../shared/protect');
 const { DEMO_DRIVES, DEMO_QUICK } = require('./demo');
+const { scanArg, resolveRoot } = require('./launch');
 
 // --demo shows a made-up drive and never touches the disk (for screenshots and talks).
 const DEMO = process.argv.includes('--demo') || !!process.env.DISKBLOOM_DEMO;
+// One window at a time: a second start (for example from Explorer) hands its folder to the
+// first window. The demo and the e2e test run beside a normal copy, so they stay separate.
+const SINGLE = !DEMO && !process.env.DISKBLOOM_E2E;
 
 let win = null;
 let host = null;
@@ -170,8 +174,18 @@ ipcMain.handle('win:control', (_e, action) => {
 ipcMain.handle('drives:list', () => listDrives());
 ipcMain.handle('quick:list', () => quickTargets());
 ipcMain.handle('scan:start', (_e, root) => {
+  // Only a root that resolves to itself is scanned, so the window and the tree agree on its spelling.
+  const ok = DEMO ? DEMO_DRIVES.some(d => d.root === root) : resolveRoot(root) === root;
+  if (!ok) return false;
   scanningRoot = root;
   send({ type: 'scan', root, scanner: scannerPath(), demo: DEMO });
+  return true;
+});
+ipcMain.handle('dialog:folder', async () => {
+  if (DEMO || !win) return null;
+  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'dontAddToRecent'] });
+  if (r.canceled || !r.filePaths.length) return null;
+  return { root: resolveRoot(r.filePaths[0]), raw: r.filePaths[0] };
 });
 ipcMain.handle('scan:cancel', () => { if (host) host.postMessage({ type: 'cancel' }); });
 ipcMain.handle('tree:view', (_e, p, depth) => ask({ type: 'view', path: p, depth }));
@@ -188,7 +202,7 @@ ipcMain.handle('app:info', () => ({
   locale: [app.getSystemLocale(), ...app.getPreferredSystemLanguages()].find(l => /^tr/i.test(l || ''))
     || app.getPreferredSystemLanguages()[0] || app.getLocale(),
   admin: isAdmin(),
-  autoScan: autoScanArg(),
+  autoScan: scanRequest(process.argv),
 }));
 
 // Restarts the app elevated (UAC prompt) and scans `root` again, so folders that need
@@ -199,8 +213,13 @@ ipcMain.handle('app:elevate', (_e, root) => {
   const args = (app.isPackaged ? [] : [app.getAppPath()]).concat(root ? [`--scan=${root.replace(/[\\/]+$/, '')}`] : []);
   const quote = s => `'${String(s).replace(/'/g, "''")}'`;
   const list = args.length ? ` -ArgumentList ${args.map(a => quote(`"${a}"`)).join(',')}` : '';
+  // The elevated copy must get the single-instance lock, so this one lets it go first.
+  if (SINGLE) app.releaseSingleInstanceLock();
   const ps = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `Start-Process -FilePath ${quote(exe)}${list} -Verb RunAs`], { windowsHide: true });
-  ps.on('exit', code => { if (code === 0) app.quit(); });
+  ps.on('exit', code => {
+    if (code === 0) app.quit();
+    else if (SINGLE) app.requestSingleInstanceLock(); // UAC was cancelled; stay the only window
+  });
 });
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
@@ -220,17 +239,28 @@ function isAdmin() {
   try { execFileSync('net', ['session'], { stdio: 'ignore', windowsHide: true }); return true; } catch { return false; }
 }
 
-function autoScanArg() {
-  const a = process.argv.find(x => x.startsWith('--scan='));
-  if (!a) return null;
-  const root = a.slice(7).replace(/"/g, '');
-  return /^[a-z]:$/i.test(root) ? root + '\\' : root;
+// A --scan request: the folder to scan, or only the raw text when it cannot be scanned.
+function scanRequest(argv) {
+  const raw = scanArg(argv);
+  if (!raw || DEMO) return null;
+  return { root: resolveRoot(raw), raw };
 }
 
-app.whenReady().then(() => {
-  startHost();
-  createWindow();
-});
+if (SINGLE && !app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_e, argv) => {
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    const req = scanRequest(argv);
+    if (req) win.webContents.send('app:scan', req);
+  });
+  app.whenReady().then(() => {
+    startHost();
+    createWindow();
+  });
+}
 app.on('window-all-closed', () => {
   if (host) host.kill();
   app.quit();
