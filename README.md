@@ -15,6 +15,8 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 ## Features
 
 - **Treemap of your drive.** Every folder and file is a rounded tile; its area is its size. Labels show the name and size.
+- **Any drive or folder.** Scan a whole drive, or pick one folder (Downloads, a game library, a project) for a quick look.
+- **Explorer menu.** Turn on *Explorer menu* in the side panel, then right-click any folder or drive and pick **Scan with Diskbloom**. On Windows 11 it is under *Show more options*. The open window takes the folder; a second window does not open.
 - **Fast native scan.** A small multi-threaded scanner reads the file system directly. A full system drive with 1.3 million files takes about 10 seconds on an SSD.
 - **The map grows while it scans.** You can start exploring before the scan is finished.
 - **Zoom into any folder.** Double-click a tile and the map flies into it. Press <kbd>Esc</kbd> or use the path pills to go back.
@@ -37,6 +39,7 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 
 | Action | Mouse | Keyboard |
 | --- | --- | --- |
+| Scan a folder | *Pick a folder…*, or right-click it in Explorer | |
 | Select a tile | Click | |
 | Open a folder | Double-click | <kbd>Enter</kbd> |
 | Go up | Click a path pill | <kbd>Esc</kbd> / <kbd>Backspace</kbd> |
@@ -57,6 +60,8 @@ npm run e2e             # end-to-end smoke test on your real drive (moves one te
 npm run dist            # portable .exe and installer in dist/
 ```
 
+`Diskbloom.exe --scan=D:\Games` opens the app and scans that folder at once.
+
 ## How it works
 
 ```
@@ -64,6 +69,8 @@ native/scanner.cs        multi-threaded FindFirstFileEx walker, streams one line
 src/main/scan-host.js    Electron utility process: runs the scanner and owns the tree
 src/main/tree.js         in-memory tree, rolled-up sizes, bounded snapshots for the UI
 src/main/main.js         window, IPC, Recycle Bin moves, protection checks
+src/main/launch.js       turns --scan and dialog paths into a checked scan root
+src/main/explorer-menu.js  the "Scan with Diskbloom" entry in the current user's registry
 src/shared/protect.js    the rules for paths that can never be moved
 src/renderer/            the UI: squarified treemap, tooltip, basket, animations
 ```
@@ -72,7 +79,7 @@ The scanner skips junctions and symbolic links so nothing is counted twice. The 
 
 ## Türkçe
 
-Diskbloom, Windows için pastel renkli ve animasyonlu bir disk alanı görüntüleyicisi ve temizleyicisidir. Diskinizi taşıyan klasörleri dikdörtgenlerle gösterir. Bir klasöre çift tıklayarak içine girin. Sağ tıklayarak dosyaları silme sepetine ekleyin. Diskbloom dosyaları onayınızdan sonra Geri Dönüşüm Kutusuna taşır. Sistem dosyalarını ve kurulu programları silmez.
+Diskbloom, Windows için pastel renkli ve animasyonlu bir disk alanı görüntüleyicisi ve temizleyicisidir. Diskinizi taşıyan klasörleri dikdörtgenlerle gösterir. Tüm diski veya yalnızca bir klasörü tarayabilirsiniz. Explorer menüsünü açın ve bir klasöre sağ tıklayarak "Diskbloom ile tara" seçin. Bir klasöre çift tıklayarak içine girin. Sağ tıklayarak dosyaları silme sepetine ekleyin. Diskbloom dosyaları onayınızdan sonra Geri Dönüşüm Kutusuna taşır. Sistem dosyalarını ve kurulu programları silmez.
 
 ## License
 

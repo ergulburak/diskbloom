@@ -32,6 +32,14 @@ macOS-like look are core requirements, not polish.
 - The free-space figure counts moved items as still used until the Recycle Bin is emptied.
 - Turkish and English; Turkish when the Windows region or a preferred language is Turkish.
 - `--demo` shows a made-up drive and never touches the disk, for screenshots and talks.
+- A scan root can be a drive or a single folder on a drive letter. Network paths (`\\server\share`)
+  are not offered, because the lock rules and the tree are written for drive paths.
+- One window at a time. `--scan=<folder>` from a second start (the Explorer menu) goes to the open
+  window. The demo and the e2e test do not take the lock.
+- The Explorer menu entry is opt-in (a switch in the side panel) and lives under HKEY_CURRENT_USER,
+  so it works for the portable .exe too and needs no administrator rights. It uses the classic
+  `shell` verb, which Windows 11 shows under "Show more options"; the new Windows 11 menu would need
+  a signed package with a COM handler.
 
 ## Not in this version
 
