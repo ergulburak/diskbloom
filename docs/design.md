@@ -49,6 +49,13 @@ macOS-like look are core requirements, not polish.
 - Nine type groups by extension (`src/shared/filetypes.js`); `.ts` counts as code, because
   node_modules hold far more TypeScript than transport-stream video.
 
+- Hidden space = the drive's used space minus the scanned total, shown only after a complete
+  drive scan and only from 256 MB (or 0.2% of the drive) up, so cluster slack does not make noise.
+  The scanner counts logical sizes, so compressed or cloud-only files can hide part of the gap.
+- Diskbloom does not delete restore points or system files itself; the tools dialog opens the
+  Windows tool that owns them. Turning hibernation off is the one setting it changes, after a second
+  click and a UAC prompt.
+
 ## Not in this version
 
 - Emptying the Recycle Bin from the app, permanent delete.

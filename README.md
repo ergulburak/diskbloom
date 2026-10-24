@@ -28,6 +28,8 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
   - Windows, installed programs, page and hibernation files, drive roots and your profile's top folders are locked.
   - The free-space bar is honest: the space comes back only after you empty the Recycle Bin.
 - **Quick clean.** One click adds the contents of Temp, browser caches, the Windows Update download cache, crash dumps and developer caches (npm, pip, Gradle, NuGet) when they exist.
+- **Hidden space.** After a drive scan, space that Windows counts as used but no file explains (restore points, unreadable folders, file system records) shows as its own hatched tile.
+- **Windows tools.** One dialog opens Disk Cleanup, Storage Sense and System Protection, and can turn off hibernation to delete `hiberfil.sys`.
 - **Administrator rescan** for folders that a normal user cannot read.
 - **Turkish and English** interface.
 
