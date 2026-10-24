@@ -85,16 +85,18 @@ function demoLines() {
   const rand = rng(42);
   const lines = [];
   let nextId = 0;
+  // Made-up last write times: up to four years before 1 June 2026, so age filters have something to find.
+  const when = () => 1780272000 - Math.floor(rand() * 4 * 365) * 86400;
   const walk = (obj, parentId) => {
     for (const [name, v] of Object.entries(obj)) {
       if (typeof v === 'number') {
-        lines.push(`F\t${parentId}\t${Math.round(v * GB)}\t${name}`);
+        lines.push(`F\t${parentId}\t${Math.round(v * GB)}\t${name}\t${when()}`);
       } else if (v.many) {
         const id = ++nextId;
         lines.push(`D\t${id}\t${parentId}\t${name}`);
         const weights = Array.from({ length: v.n }, () => Math.exp(rand() * 3));
         const sum = weights.reduce((a, b) => a + b, 0);
-        weights.forEach((w, i) => lines.push(`F\t${id}\t${Math.round(w / sum * v.gb * GB)}\t${v.name(i + 1)}`));
+        weights.forEach((w, i) => lines.push(`F\t${id}\t${Math.round(w / sum * v.gb * GB)}\t${v.name(i + 1)}\t${when()}`));
       } else {
         const id = ++nextId;
         lines.push(`D\t${id}\t${parentId}\t${name}`);

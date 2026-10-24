@@ -2,7 +2,7 @@
 // Walks a directory tree with FindFirstFileExW on several threads and streams
 // the result to stdout as UTF-8 lines, one block per directory:
 //   D \t id \t parentId \t name        a sub-directory (id is new, parent already sent)
-//   F \t parentId \t size \t name      a file
+//   F \t parentId \t size \t name \t mtime   a file; mtime is the last write time in Unix seconds
 //   E \t parentId                      the directory could not be read
 //   X                                  the scan is complete
 // A directory's block is written only after its parent's block, and sub-directories
@@ -123,7 +123,9 @@ static class Scanner
                 else
                 {
                     long size = ((long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
-                    sb.Append("F\t").Append(job.Id).Append('\t').Append(size).Append('\t').Append(name).Append('\n');
+                    // FILETIME counts 100 ns steps from 1601; Unix seconds count from 1970.
+                    long mtime = Math.Max(0L, fd.ftLastWriteTime / 10000000L - 11644473600L);
+                    sb.Append("F\t").Append(job.Id).Append('\t').Append(size).Append('\t').Append(name).Append('\t').Append(mtime).Append('\n');
                 }
             } while (FindNextFileW(h, out fd));
         }

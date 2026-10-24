@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('diskbloom', {
   explorerMenu: () => ipcRenderer.invoke('menu:get'),
   setExplorerMenu: (on, label) => ipcRenderer.invoke('menu:set', on, label),
   view: (path, depth) => ipcRenderer.invoke('tree:view', path, depth),
+  search: (path, filter) => ipcRenderer.invoke('tree:search', path, filter),
   trash: items => ipcRenderer.invoke('items:trash', items),
   reveal: path => ipcRenderer.invoke('shell:reveal', path),
   openRecycleBin: () => ipcRenderer.invoke('shell:recycleBin'),

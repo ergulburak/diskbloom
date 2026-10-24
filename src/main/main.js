@@ -190,6 +190,7 @@ ipcMain.handle('dialog:folder', async () => {
 });
 ipcMain.handle('scan:cancel', () => { if (host) host.postMessage({ type: 'cancel' }); });
 ipcMain.handle('tree:view', (_e, p, depth) => ask({ type: 'view', path: p, depth }));
+ipcMain.handle('tree:search', (_e, p, filter) => ask({ type: 'search', path: p, filter }));
 ipcMain.handle('items:trash', (_e, items) => trashItems(items));
 ipcMain.handle('shell:reveal', (_e, p) => { if (!DEMO) shell.showItemInFolder(p); });
 ipcMain.handle('shell:recycleBin', () => {

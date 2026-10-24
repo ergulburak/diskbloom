@@ -22,6 +22,7 @@ port.on('message', e => {
     case 'view': reply(m.id, tree ? tree.view(m.path, m.depth) : null); break;
     case 'remove': reply(m.id, tree ? tree.removeMany(m.paths) : []); break;
     case 'children': reply(m.id, tree ? tree.childPaths(m.path) : []); break;
+    case 'search': reply(m.id, tree ? tree.search(m.path, m.filter) : null); break;
   }
 });
 
@@ -110,7 +111,7 @@ async function nodeScan(scan, t) {
                 t.addDir(id, job.id, e.name);
                 queue.push({ id, dir: full });
               } else if (e.isFile()) {
-                stats.push(fs.promises.lstat(full).then(s => t.addFile(job.id, s.size, e.name), () => t.addFile(job.id, 0, e.name)));
+                stats.push(fs.promises.lstat(full).then(s => t.addFile(job.id, s.size, e.name, Math.floor(s.mtimeMs / 1000)), () => t.addFile(job.id, 0, e.name)));
               }
             }
             await Promise.all(stats);

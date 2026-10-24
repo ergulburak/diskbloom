@@ -31,14 +31,18 @@ class Tree {
     this.dirCount++;
   }
 
-  addFile(parentId, size, name) {
+  addFile(parentId, size, name, mtime = 0) {
     const dir = this.dirs[parentId];
     if (!dir || dir.dead) return;
     dir.fileNames.push(name);
     dir.fileSizes.push(size);
+    dir.fileTimes.push(mtime);
     this.fileCount++;
     const type = typeOf(name);
-    for (let d = dir; d; d = d.parent) { d.size += size; d.files++; d.types[type] += size; }
+    for (let d = dir; d; d = d.parent) {
+      d.size += size; d.files++; d.types[type] += size;
+      if (mtime > d.newest) d.newest = mtime;
+    }
   }
 
   markError(id) {
@@ -96,7 +100,10 @@ class Tree {
 
   fileNode(dir, i) {
     const path = this.pathOf(dir) + (dir.parent ? '\\' : '') + dir.fileNames[i];
-    return { kind: 'file', name: dir.fileNames[i], path, size: dir.fileSizes[i], files: 1, lock: lockReason(path), type: TYPES[typeOf(dir.fileNames[i])] };
+    return {
+      kind: 'file', name: dir.fileNames[i], path, size: dir.fileSizes[i], files: 1, lock: lockReason(path),
+      type: TYPES[typeOf(dir.fileNames[i])], mtime: dir.fileTimes[i] || undefined,
+    };
   }
 
   dirNode(dir, depth, limits, level, minAbs) {
@@ -104,7 +111,7 @@ class Tree {
     const node = {
       kind: 'dir', name: dir.parent ? dir.name : this.rootPath.slice(0, -1).split('\\').pop(), path,
       size: dir.size, files: dir.files, items: dir.subdirs.length + dir.fileNames.length,
-      error: dir.error || undefined, lock: lockReason(path), types: typeSizes(dir.types),
+      error: dir.error || undefined, lock: lockReason(path), types: typeSizes(dir.types), newest: dir.newest || undefined,
     };
     if (depth <= 0) return node;
     const entries = [];
@@ -124,6 +131,54 @@ class Tree {
     if (restCount) children.push({ kind: 'rest', name: '', path: path + '\u0000rest', size: restSize, files: restCount });
     node.children = children;
     return node;
+  }
+
+  /**
+   * The largest files or folders under `p` that match a filter, biggest first, plus the number
+   * and total size of all matches.
+   *   text     part of the name, or a pattern with * and ? that must match the whole name
+   *   type     a file type group ('video'...); a folder matches when half of it is that type
+   *   minSize  in bytes
+   *   before   Unix seconds: files last written before it, or folders whose newest file is older
+   *   kind     'files' or 'dirs'; a matching folder is listed once, not again for each folder in it
+   */
+  search(p, { text = '', type = null, minSize = 0, before = 0, kind = 'files', limit = 200 } = {}) {
+    const hit = this.find(p);
+    if (!hit || hit.index !== undefined) return { items: [], count: 0, size: 0 };
+    const match = nameMatcher(text);
+    const typeIndex = TYPES.indexOf(type);
+    let found = [], count = 0, size = 0;
+    const keep = entry => {
+      count++;
+      size += entry.size;
+      found.push(entry);
+      if (found.length > limit * 4) { found.sort((a, b) => b.size - a.size); found.length = limit; }
+    };
+    const stack = [hit.dir];
+    while (stack.length) {
+      const dir = stack.pop();
+      if (kind === 'dirs') {
+        for (const d of dir.subdirs) {
+          const ok = d.size >= minSize && (!match || match(d.name))
+            && (!before || (d.newest > 0 && d.newest < before))
+            && (typeIndex < 0 || d.types[typeIndex] * 2 >= d.size);
+          if (ok && d.size > 0) keep({ d, size: d.size }); else stack.push(d);
+        }
+        continue;
+      }
+      for (let i = 0; i < dir.fileNames.length; i++) {
+        const s = dir.fileSizes[i];
+        if (s < minSize) continue;
+        if (before && !(dir.fileTimes[i] > 0 && dir.fileTimes[i] < before)) continue;
+        if (typeIndex >= 0 && typeOf(dir.fileNames[i]) !== typeIndex) continue;
+        if (match && !match(dir.fileNames[i])) continue;
+        keep({ dir, i, size: s });
+      }
+      for (const d of dir.subdirs) stack.push(d);
+    }
+    found.sort((a, b) => b.size - a.size);
+    const items = found.slice(0, limit).map(e => e.d ? this.dirNode(e.d, 0) : this.fileNode(e.dir, e.i));
+    return { items, count, size };
   }
 
   /** Full paths of everything directly inside a folder. */
@@ -163,7 +218,7 @@ class Tree {
     });
     for (const [dir, names] of groups) {
       if (dir.dead) continue;
-      const keepNames = [], keepSizes = [];
+      const keepNames = [], keepSizes = [], keepTimes = [];
       const types = new Float64Array(TYPES.length), one = new Float64Array(TYPES.length);
       let size = 0, files = 0;
       for (let k = 0; k < dir.fileNames.length; k++) {
@@ -176,14 +231,16 @@ class Tree {
           types[type] += dir.fileSizes[k];
           one.fill(0);
           one[type] = dir.fileSizes[k];
-          this.toBin(dir.fileNames[k], dir.fileSizes[k], 1, one);
+          this.toBin(dir.fileNames[k], dir.fileSizes[k], 1, one, dir.fileTimes[k]);
         } else {
           keepNames.push(dir.fileNames[k]);
           keepSizes.push(dir.fileSizes[k]);
+          keepTimes.push(dir.fileTimes[k]);
         }
       }
       dir.fileNames = keepNames;
       dir.fileSizes = keepSizes;
+      dir.fileTimes = keepTimes;
       for (let d = dir; d; d = d.parent) { d.size -= size; d.files -= files; addTypes(d.types, types, -1); }
     }
     return sizes;
@@ -201,15 +258,16 @@ class Tree {
     // Everything below is dead too, so late scanner lines for it are not counted anywhere.
     const stack = [dir];
     while (stack.length) { const d = stack.pop(); d.dead = true; stack.push(...d.subdirs); }
-    this.toBin(dir.name, dir.size, dir.files, dir.types);
+    this.toBin(dir.name, dir.size, dir.files, dir.types, dir.newest);
     return dir.size;
   }
 
-  toBin(name, size, files, types) {
+  toBin(name, size, files, types, mtime) {
     const bin = this.root.subdirs.find(s => s.name.toLowerCase() === '$recycle.bin');
     if (!bin) return;
     bin.fileNames.push(name);
     bin.fileSizes.push(size);
+    bin.fileTimes.push(mtime || 0);
     for (let d = bin; d; d = d.parent) { d.size += size; d.files += files; addTypes(d.types, types, 1); }
   }
 }
@@ -217,8 +275,18 @@ class Tree {
 function makeDir(id, name, parent) {
   return {
     id, name, parent, size: 0, files: 0, types: new Float64Array(TYPES.length),
-    subdirs: [], fileNames: [], fileSizes: [], map: null, error: false, dead: false,
+    newest: 0, // last write time of the newest file inside, in Unix seconds
+    subdirs: [], fileNames: [], fileSizes: [], fileTimes: [], map: null, error: false, dead: false,
   };
+}
+
+/** A name test for search text: a * and ? pattern matches the whole name, other text any part of it. */
+function nameMatcher(text) {
+  const q = String(text || '').trim().toLowerCase();
+  if (!q) return null;
+  if (!/[*?]/.test(q)) return name => name.toLowerCase().includes(q);
+  const re = new RegExp('^' + q.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+  return name => re.test(name.toLowerCase());
 }
 
 function addTypes(into, from, sign) {
@@ -251,9 +319,10 @@ class LineParser {
   line(l) {
     if (l.endsWith('\r')) l = l.slice(0, -1);
     const t = l.charCodeAt(0);
-    if (t === 70) { // F parent size name
-      const a = l.indexOf('\t', 2), b = l.indexOf('\t', a + 1);
-      this.tree.addFile(+l.slice(2, a), +l.slice(a + 1, b), l.slice(b + 1));
+    if (t === 70) { // F parent size name [mtime]; a file name never holds a tab
+      const a = l.indexOf('\t', 2), b = l.indexOf('\t', a + 1), c = l.indexOf('\t', b + 1);
+      if (c < 0) this.tree.addFile(+l.slice(2, a), +l.slice(a + 1, b), l.slice(b + 1));
+      else this.tree.addFile(+l.slice(2, a), +l.slice(a + 1, b), l.slice(b + 1, c), +l.slice(c + 1));
     } else if (t === 68) { // D id parent name
       const a = l.indexOf('\t', 2), b = l.indexOf('\t', a + 1);
       this.tree.addDir(+l.slice(2, a), +l.slice(a + 1, b), l.slice(b + 1));
