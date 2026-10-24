@@ -20,6 +20,7 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 - **Fast native scan.** A small multi-threaded scanner reads the file system directly. A full system drive with 1.3 million files takes about 10 seconds on an SSD.
 - **The map grows while it scans.** You can start exploring before the scan is finished.
 - **Zoom into any folder.** Double-click a tile and the map flies into it. Press <kbd>Esc</kbd> or use the path pills to go back.
+- **File types.** The side panel lists what fills the open folder: video, images, audio, archives, disk images, programs, documents, code and other. Click a type and only its tiles stay bright on the map.
 - **Floating details.** A glass tooltip follows the mouse with size, item and file counts, and the share of the parent folder and the disk.
 - **Cleanup basket.** Right-click tiles (or press <kbd>+</kbd>) to collect files and folders from anywhere on the drive, then move them all at once.
 - **Safe by design.**
@@ -40,6 +41,7 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 | Action | Mouse | Keyboard |
 | --- | --- | --- |
 | Scan a folder | *Pick a folder…*, or right-click it in Explorer | |
+| Light up one file type | Click it under *File types* (click again to turn it off) | |
 | Select a tile | Click | |
 | Open a folder | Double-click | <kbd>Enter</kbd> |
 | Go up | Click a path pill | <kbd>Esc</kbd> / <kbd>Backspace</kbd> |
@@ -72,6 +74,7 @@ src/main/main.js         window, IPC, Recycle Bin moves, protection checks
 src/main/launch.js       turns --scan and dialog paths into a checked scan root
 src/main/explorer-menu.js  the "Scan with Diskbloom" entry in the current user's registry
 src/shared/protect.js    the rules for paths that can never be moved
+src/shared/filetypes.js  file extensions grouped into the nine file types
 src/renderer/            the UI: squarified treemap, tooltip, basket, animations
 ```
 
@@ -79,7 +82,7 @@ The scanner skips junctions and symbolic links so nothing is counted twice. The 
 
 ## Türkçe
 
-Diskbloom, Windows için pastel renkli ve animasyonlu bir disk alanı görüntüleyicisi ve temizleyicisidir. Diskinizi taşıyan klasörleri dikdörtgenlerle gösterir. Tüm diski veya yalnızca bir klasörü tarayabilirsiniz. Explorer menüsünü açın ve bir klasöre sağ tıklayarak "Diskbloom ile tara" seçin. Bir klasöre çift tıklayarak içine girin. Sağ tıklayarak dosyaları silme sepetine ekleyin. Diskbloom dosyaları onayınızdan sonra Geri Dönüşüm Kutusuna taşır. Sistem dosyalarını ve kurulu programları silmez.
+Diskbloom, Windows için pastel renkli ve animasyonlu bir disk alanı görüntüleyicisi ve temizleyicisidir. Diskinizi taşıyan klasörleri dikdörtgenlerle gösterir. Tüm diski veya yalnızca bir klasörü tarayabilirsiniz. "Dosya türleri" listesi klasördeki videoları, görselleri, programları ve diğer türleri gösterir. Bir türe tıklayınca haritada yalnızca o türdeki kutular parlak kalır. Explorer menüsünü açın ve bir klasöre sağ tıklayarak "Diskbloom ile tara" seçin. Bir klasöre çift tıklayarak içine girin. Sağ tıklayarak dosyaları silme sepetine ekleyin. Diskbloom dosyaları onayınızdan sonra Geri Dönüşüm Kutusuna taşır. Sistem dosyalarını ve kurulu programları silmez.
 
 ## License
 

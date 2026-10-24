@@ -41,8 +41,16 @@ macOS-like look are core requirements, not polish.
   `shell` verb, which Windows 11 shows under "Show more options"; the new Windows 11 menu would need
   a signed package with a COM handler.
 
+- File types are shown by lighting up one type at a time, not by giving every type its own colour.
+  Nine pastel colours on one map fail a colour-vision check (several pairs collapse for red-green
+  colour blindness, and even yellow and orange are close for normal vision). One lit type needs no
+  colour key, keeps the pastel folder colours, and reads the same for everyone. A folder tile is as
+  bright as its share of the lit type. The list itself uses one colour for every bar.
+- Nine type groups by extension (`src/shared/filetypes.js`); `.ts` counts as code, because
+  node_modules hold far more TypeScript than transport-stream video.
+
 ## Not in this version
 
 - Emptying the Recycle Bin from the app, permanent delete.
 - Reading the NTFS MFT directly (WizTree-style), which would need administrator rights.
-- File type colouring, search, duplicate finding, scheduled scans, auto-update, code signing.
+- Search, duplicate finding, scheduled scans, auto-update, code signing.
