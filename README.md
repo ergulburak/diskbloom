@@ -22,6 +22,7 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 - **Zoom into any folder.** Double-click a tile and the map flies into it. Press <kbd>Esc</kbd> or use the path pills to go back.
 - **File types.** The side panel lists what fills the open folder: video, images, audio, archives, disk images, programs, documents, code and other. Click a type and only its tiles stay bright on the map.
 - **Find and largest files.** <kbd>Ctrl</kbd>+<kbd>F</kbd> lists the largest files in the open folder. Filter by name or a pattern (`*.iso`), type, size and age, or list folders where nothing changed for years.
+- **What changed since the last scan.** Rescan a drive or folder and Diskbloom lists the folders that grew or shrank, with the total change.
 - **Floating details.** A glass tooltip follows the mouse with size, item and file counts, and the share of the parent folder and the disk.
 - **Cleanup basket.** Right-click tiles (or press <kbd>+</kbd>) to collect files and folders from anywhere on the drive, then move them all at once.
 - **Safe by design.**
@@ -37,6 +38,8 @@ A pastel, animated disk space visualizer and cleaner for Windows, in the spirit 
 <p align="center">
   <img src="docs/media/overview.png" width="49%" alt="Overview of a scanned drive">
   <img src="docs/media/basket.png" width="49%" alt="A folder opened with an item in the cleanup basket">
+  <img src="docs/media/types.png" width="49%" alt="Video files lit up on the map from the file types list">
+  <img src="docs/media/find.png" width="49%" alt="The find panel listing the largest files of the drive">
 </p>
 
 ## Use it

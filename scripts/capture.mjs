@@ -58,6 +58,16 @@ if (big) {
 await c.send('Page.stopScreencast');
 await shot('overview');
 
+// Light up one file type, then show the find panel with the largest files.
+await c.evaluate(`document.querySelector('#types [data-type="video"]')?.click()`);
+await sleep(900);
+await shot('types');
+await c.evaluate(`document.querySelector('#types [data-type="video"]')?.click()`);
+await c.evaluate(`document.getElementById('findBtn').click()`);
+await sleep(1200);
+await shot('find');
+await c.evaluate(`document.getElementById('findClose').click()`);
+
 // Put the user's own language choice back (or none, if there was none).
 await c.evaluate(`window.diskbloom.saveSettings({ lang: ${JSON.stringify(saved.lang ?? null)} ?? undefined })`);
 await c.evaluate(`window.close()`).catch(() => {});

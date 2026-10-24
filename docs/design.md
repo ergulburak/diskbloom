@@ -60,6 +60,10 @@ macOS-like look are core requirements, not polish.
   (about 0.2 s for 1.3 million files) and returns only the largest 200 matches plus the count and total.
   A folder's age is the age of its newest file; a matching folder is listed once, not again for
   every folder inside it.
+- Each complete scan keeps a snapshot of the folders of 10 MB and up (about 0.7 MB for a full system
+  drive) and compares it with the previous snapshot of the same root. Only changes of 50 MB and up
+  are listed, and a parent is left out when one listed folder inside it explains 80% of its change.
+  A rescan is the only trigger; there is no scheduled scan.
 
 ## Not in this version
 
