@@ -1,7 +1,7 @@
 {
   "name": "diskbloom",
   "productName": "Diskbloom",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A pastel, animated disk space visualizer and cleaner for Windows.",
   "main": "src/main/main.js",
   "author": "ergulburak",
