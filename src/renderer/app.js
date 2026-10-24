@@ -22,6 +22,7 @@ const state = {
   menu: null,          // Explorer menu entry: true / false, or null where it is not offered
   hl: null,            // file type lit on the map ('video'...), or null
   hlPreview: null,     // file type under the mouse in the type list
+  changes: null,       // comparison with the previous scan of this root, or null
 };
 
 // ---------- helpers ----------
@@ -40,7 +41,8 @@ function fmtBytes(b) {
   return Number(s).toLocaleString(locale(), { maximumFractionDigits: 2 }) + ' ' + units[i];
 }
 const secs = ms => (ms / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 }) + ' ' + t('seconds');
-const fmtDate = s => (s ? new Date(s * 1000).toLocaleDateString(locale(), { year: 'numeric', month: 'short', day: 'numeric' }) : '');
+const fmtDelta = b => (b >= 0 ? '+' : '−') + fmtBytes(Math.abs(b));
+const fmtDate = s =>(s ? new Date(s * 1000).toLocaleDateString(locale(), { year: 'numeric', month: 'short', day: 'numeric' }) : '');
 
 // File type groups as the scan tree names them (src/shared/filetypes.js).
 const TYPE_ICON = {
@@ -50,6 +52,7 @@ const TYPE_ICON = {
 function icon(n) {
   if (n.kind === 'rest') return '';
   if (n.kind === 'hidden') return '🕳️';
+  if (n.kind === 'gone') return '🗑️';
   if (n.kind === 'dir') return '📁';
   return TYPE_ICON[n.type] || '📄';
 }
@@ -152,6 +155,7 @@ async function startScan(root) {
   state.quickSizes.clear();
   state.hl = state.hlPreview = null;
   closeFind();
+  state.changes = null;
   document.body.classList.add('scanned');
   tm.innerHTML = '';
   renderDrives(); renderBasket(); renderQuick(); renderStatus(); renderCrumbs(); renderTypes();
@@ -396,6 +400,8 @@ function tipHtml(n, parent) {
     <div class="kv"><span>${t('size')}</span><span>${fmtBytes(n.size)}</span></div>`;
   const when = n.kind === 'dir' ? n.newest : n.mtime;
   if (when) h += `<div class="kv"><span>${t(n.kind === 'dir' ? 'lastChange' : 'modified')}</span><span>${fmtDate(when)}</span></div>`;
+  const delta = n.kind === 'dir' && state.changes?.deltas[lower(n.path)];
+  if (delta) h += `<div class="kv"><span>${t('sinceLastShort')}</span><span>${fmtDelta(delta)}</span></div>`;
   if (n.kind === 'dir') {
     h += `<div class="kv"><span>${t('content')}</span><span>${num(n.items)} ${t('items')} · ${num(n.files)} ${t('files')}</span></div>`;
     const top = topTypes(n).filter(([, s]) => s / (n.size || 1) >= 0.01).slice(0, 3);
@@ -761,7 +767,17 @@ api.onProgress(m => {
     loadDrives().then(() => refresh('flip'));
     runFind();
     refreshQuickSizes();
-    if (!m.cancelled && !m.error) toast(`✓ ${t('done')} · ${secs(m.elapsed)} · ${num(m.files)} ${t('files')}`);
+    if (!m.cancelled && !m.error) {
+      const root = state.root, done = `✓ ${t('done')} · ${secs(m.elapsed)} · ${num(m.files)} ${t('files')}`;
+      toast(done);
+      // Compare with the previous scan of this root (and keep this one for next time).
+      api.changes(root).then(c => {
+        if (state.root !== root) return;
+        state.changes = c;
+        if (c && c.items.length) toast(done + ' · ' + t('sinceLast', { delta: fmtDelta(c.after - c.before) }), { label: t('showChanges'), fn: () => openFind('changes') });
+        if (find.open && find.kind === 'changes') runFind();
+      });
+    }
     if (m.error) toast('⚠ ' + esc(m.error));
   } else if (!m.done) {
     scheduleRefresh();
@@ -787,10 +803,13 @@ function fillFindSelects() {
   fill('fAge', AGES.map((d, i) => [i, i ? t('olderThan_' + d) : t('anyAge')]));
   $('fText').placeholder = t('findHint');
   document.querySelectorAll('#fKind button').forEach(b => b.classList.toggle('on', b.dataset.kind === find.kind));
+  $('find').classList.toggle('changes', find.kind === 'changes');
 }
 
-function openFind() {
+// kind: 'files', 'dirs' or 'changes' (folders that grew or shrank since the previous scan).
+function openFind(kind) {
   if (!state.root) return;
+  if (kind) find.kind = kind;
   fillFindSelects();
   find.open = true;
   hideTip();
@@ -811,6 +830,14 @@ function findFilter() {
 async function runFind() {
   if (!find.open || !state.root) return;
   const seq = ++find.seq, scope = state.path;
+  if (find.kind === 'changes') {
+    // Changes cover the whole scanned root and were worked out when the scan finished.
+    const c = state.changes;
+    $('findTitle').textContent = t('changesIn', { name: isDrive(state.root) ? state.root.replace(/\\$/, '') : baseName(state.root) });
+    find.result = c ? { items: c.items, count: c.items.length, size: c.after - c.before, since: c.since } : { items: [], count: 0, size: 0 };
+    renderFind();
+    return;
+  }
   $('findTitle').textContent = t('findIn', { name: isDrive(scope) ? scope.replace(/\\$/, '') : baseName(scope) });
   const r = await api.search(scope, findFilter());
   if (seq !== find.seq) return;
@@ -819,16 +846,21 @@ async function runFind() {
 }
 
 function renderFind() {
-  const r = find.result;
-  $('fSum').textContent = !r.count ? t('findNone')
-    : t('findSum', { n: num(r.count), size: fmtBytes(r.size) }) + (r.count > r.items.length ? ' · ' + t('findTop', { n: num(r.items.length) }) : '');
+  const r = find.result, changes = find.kind === 'changes';
+  if (changes) {
+    $('fSum').textContent = r.since === undefined ? t('noChanges')
+      : t('changesSum', { date: fmtDate(r.since / 1000), delta: fmtDelta(r.size), n: num(r.count) });
+  } else {
+    $('fSum').textContent = !r.count ? t('findNone')
+      : t('findSum', { n: num(r.count), size: fmtBytes(r.size) }) + (r.count > r.items.length ? ' · ' + t('findTop', { n: num(r.items.length) }) : '');
+  }
   $('fList').innerHTML = r.items.map((n, i) => {
     const own = inBasket(n.path);
-    return `<div class="frow${own || ancestorInBasket(n.path) ? ' in' : ''}${n.lock ? ' locked' : ''}" data-i="${i}">
+    return `<div class="frow${own || ancestorInBasket(n.path) ? ' in' : ''}${n.lock || n.kind === 'gone' ? ' locked' : ''}${n.kind === 'gone' ? ' gone' : ''}" data-i="${i}">
       <span class="ico">${icon(n)}</span>
       <div class="main"><div class="nm">${esc(n.name)}</div><div class="p">${esc(parentPath(n.path))}</div></div>
-      <span class="dt">${fmtDate(n.kind === 'dir' ? n.newest : n.mtime)}</span>
-      <span class="sz">${fmtBytes(n.size)}</span>
+      <span class="dt">${changes ? (n.before ? t('wasSize', { size: fmtBytes(n.before) }) : t('newFolder')) :fmtDate(n.kind === 'dir' ? n.newest : n.mtime)}</span>
+      <span class="sz">${changes ? fmtDelta(n.delta) : fmtBytes(n.size)}</span>
       <span class="act" data-add title="${esc(t(own ? 'remove' : 'addToBasket'))}">${own ? '✕' : '+'}</span>
       <span class="act" data-reveal title="${esc(t('reveal'))}">📂</span></div>`;
   }).join('');
@@ -859,6 +891,7 @@ $('fList').addEventListener('click', e => {
   const row = e.target.closest('[data-i]');
   if (!row) return;
   const n = find.result.items[+row.dataset.i];
+  if (n.kind === 'gone') { closeFind(); goTo({ kind: 'dir', path: parentPath(n.path) }); return; }
   if (e.target.closest('[data-reveal]')) { api.reveal(n.path); return; }
   if (e.target.closest('[data-add]')) { toggle(n); renderFind(); return; }
   closeFind();
@@ -868,7 +901,9 @@ $('fList').addEventListener('contextmenu', e => {
   const row = e.target.closest('[data-i]');
   if (!row) return;
   e.preventDefault();
-  toggle(find.result.items[+row.dataset.i]);
+  const n = find.result.items[+row.dataset.i];
+  if (n.kind === 'gone') return;
+  toggle(n);
   renderFind();
 });
 
