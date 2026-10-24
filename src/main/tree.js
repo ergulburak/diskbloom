@@ -2,9 +2,11 @@
 // In-memory directory tree built from scanner events.
 // Directories are objects; files live in two parallel arrays on their parent to keep
 // a million-file scan small. Sizes and file counts are rolled up to every ancestor
-// as entries arrive, so a view taken mid-scan is already consistent.
+// as entries arrive, so a view taken mid-scan is already consistent. The size of each
+// file type group (see shared/filetypes.js) is rolled up the same way.
 
 const { lockReason } = require('../shared/protect');
+const { TYPES, typeOf } = require('../shared/filetypes');
 
 class Tree {
   constructor(rootPath) {
@@ -35,7 +37,8 @@ class Tree {
     dir.fileNames.push(name);
     dir.fileSizes.push(size);
     this.fileCount++;
-    for (let d = dir; d; d = d.parent) { d.size += size; d.files++; }
+    const type = typeOf(name);
+    for (let d = dir; d; d = d.parent) { d.size += size; d.files++; d.types[type] += size; }
   }
 
   markError(id) {
@@ -93,7 +96,7 @@ class Tree {
 
   fileNode(dir, i) {
     const path = this.pathOf(dir) + (dir.parent ? '\\' : '') + dir.fileNames[i];
-    return { kind: 'file', name: dir.fileNames[i], path, size: dir.fileSizes[i], files: 1, lock: lockReason(path) };
+    return { kind: 'file', name: dir.fileNames[i], path, size: dir.fileSizes[i], files: 1, lock: lockReason(path), type: TYPES[typeOf(dir.fileNames[i])] };
   }
 
   dirNode(dir, depth, limits, level, minAbs) {
@@ -101,7 +104,7 @@ class Tree {
     const node = {
       kind: 'dir', name: dir.parent ? dir.name : this.rootPath.slice(0, -1).split('\\').pop(), path,
       size: dir.size, files: dir.files, items: dir.subdirs.length + dir.fileNames.length,
-      error: dir.error || undefined, lock: lockReason(path),
+      error: dir.error || undefined, lock: lockReason(path), types: typeSizes(dir.types),
     };
     if (depth <= 0) return node;
     const entries = [];
@@ -161,6 +164,7 @@ class Tree {
     for (const [dir, names] of groups) {
       if (dir.dead) continue;
       const keepNames = [], keepSizes = [];
+      const types = new Float64Array(TYPES.length), one = new Float64Array(TYPES.length);
       let size = 0, files = 0;
       for (let k = 0; k < dir.fileNames.length; k++) {
         const i = names.get(dir.fileNames[k].toLowerCase());
@@ -168,7 +172,11 @@ class Tree {
           sizes[i] = dir.fileSizes[k];
           size += dir.fileSizes[k];
           files++;
-          this.toBin(dir.fileNames[k], dir.fileSizes[k], 1);
+          const type = typeOf(dir.fileNames[k]);
+          types[type] += dir.fileSizes[k];
+          one.fill(0);
+          one[type] = dir.fileSizes[k];
+          this.toBin(dir.fileNames[k], dir.fileSizes[k], 1, one);
         } else {
           keepNames.push(dir.fileNames[k]);
           keepSizes.push(dir.fileSizes[k]);
@@ -176,7 +184,7 @@ class Tree {
       }
       dir.fileNames = keepNames;
       dir.fileSizes = keepSizes;
-      for (let d = dir; d; d = d.parent) { d.size -= size; d.files -= files; }
+      for (let d = dir; d; d = d.parent) { d.size -= size; d.files -= files; addTypes(d.types, types, -1); }
     }
     return sizes;
   }
@@ -188,26 +196,40 @@ class Tree {
     if (!parent) return 0;
     parent.subdirs.splice(parent.subdirs.indexOf(dir), 1);
     if (parent.map) parent.map.delete(dir.name.toLowerCase());
-    for (let d = parent; d; d = d.parent) { d.size -= dir.size; d.files -= dir.files; }
+    for (let d = parent; d; d = d.parent) { d.size -= dir.size; d.files -= dir.files; addTypes(d.types, dir.types, -1); }
     dir.parent = null;
     // Everything below is dead too, so late scanner lines for it are not counted anywhere.
     const stack = [dir];
     while (stack.length) { const d = stack.pop(); d.dead = true; stack.push(...d.subdirs); }
-    this.toBin(dir.name, dir.size, dir.files);
+    this.toBin(dir.name, dir.size, dir.files, dir.types);
     return dir.size;
   }
 
-  toBin(name, size, files) {
+  toBin(name, size, files, types) {
     const bin = this.root.subdirs.find(s => s.name.toLowerCase() === '$recycle.bin');
     if (!bin) return;
     bin.fileNames.push(name);
     bin.fileSizes.push(size);
-    for (let d = bin; d; d = d.parent) { d.size += size; d.files += files; }
+    for (let d = bin; d; d = d.parent) { d.size += size; d.files += files; addTypes(d.types, types, 1); }
   }
 }
 
 function makeDir(id, name, parent) {
-  return { id, name, parent, size: 0, files: 0, subdirs: [], fileNames: [], fileSizes: [], map: null, error: false, dead: false };
+  return {
+    id, name, parent, size: 0, files: 0, types: new Float64Array(TYPES.length),
+    subdirs: [], fileNames: [], fileSizes: [], map: null, error: false, dead: false,
+  };
+}
+
+function addTypes(into, from, sign) {
+  for (let t = 0; t < into.length; t++) into[t] += sign * from[t];
+}
+
+/** The non-empty type groups of a folder, by name: { video: 1200, other: 30 }. */
+function typeSizes(types) {
+  const out = {};
+  for (let t = 0; t < types.length; t++) if (types[t] > 0) out[TYPES[t]] = types[t];
+  return out;
 }
 
 /** Incremental parser for the scanner's line protocol. Feed it chunks of text. */

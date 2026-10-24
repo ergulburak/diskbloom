@@ -91,3 +91,21 @@ test('a folder root is shown without a trailing backslash', () => {
   assert.strictEqual(t.view('D:\\Games'), null);
   assert.deepStrictEqual(t.childPaths('D:\\Games\\Steam'), ['D:\\Games\\Steam\\steamapps', 'D:\\Games\\Steam\\steam.exe']);
 });
+
+test('file type sizes roll up, show in views and follow removals', () => {
+  const { t } = sample();
+  assert.deepStrictEqual(t.view('C:\\', 1).types, { video: 1000, document: 50, program: 1000 });
+  assert.deepStrictEqual(t.view('C:\\Users\\burak', 1).types, { video: 1000, document: 50 });
+  assert.strictEqual(t.view('C:\\Users\\burak\\Videos\\a.mp4').type, 'video');
+  assert.strictEqual(t.view('C:\\Users\\burak\\note.txt').type, 'document');
+
+  t.remove('C:\\Users\\burak\\Videos\\b.mkv');
+  assert.deepStrictEqual(t.view('C:\\Users', 0).types, { video: 800, document: 50 });
+  // Moved items are counted in the Recycle Bin until it is emptied, with their type.
+  assert.deepStrictEqual(t.view('C:\\$Recycle.Bin', 0).types, { video: 200 });
+  assert.deepStrictEqual(t.view('C:\\', 0).types, { video: 1000, document: 50, program: 1000 });
+
+  t.remove('C:\\Users\\burak');
+  assert.deepStrictEqual(t.view('C:\\Users', 0).types, {});
+  assert.deepStrictEqual(t.view('C:\\$Recycle.Bin', 0).types, { video: 1000, document: 50 });
+});
