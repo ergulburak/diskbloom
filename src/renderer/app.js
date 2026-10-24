@@ -20,6 +20,8 @@ const state = {
   progress: null,
   busy: false,
   menu: null,          // Explorer menu entry: true / false, or null where it is not offered
+  hl: null,            // file type lit on the map ('video'...), or null
+  hlPreview: null,     // file type under the mouse in the type list
 };
 
 // ---------- helpers ----------
@@ -39,20 +41,18 @@ function fmtBytes(b) {
 }
 const secs = ms => (ms / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 }) + ' ' + t('seconds');
 
-const EXT = [
-  [/\.(mp4|mkv|mov|avi|wmv|webm|m4v|ts)$/i, '🎬'],
-  [/\.(jpe?g|png|gif|webp|heic|raw|cr2|nef|arw|psd|bmp|tiff?)$/i, '🖼️'],
-  [/\.(mp3|wav|flac|aac|ogg|m4a)$/i, '🎵'],
-  [/\.(zip|rar|7z|tar|gz|bz2|xz)$/i, '🗜️'],
-  [/\.(iso|img|vhdx?|vmdk|qcow2|wim)$/i, '💿'],
-  [/\.(exe|msi|dll|sys|bin|pak)$/i, '⚙️'],
-];
+// File type groups as the scan tree names them (src/shared/filetypes.js).
+const TYPE_ICON = {
+  video: '🎬', image: '🖼️', audio: '🎵', archive: '🗜️', diskimage: '💿',
+  program: '⚙️', document: '📑', code: '🧩', other: '📄',
+};
 function icon(n) {
   if (n.kind === 'rest') return '';
   if (n.kind === 'dir') return '📁';
-  for (const [re, ic] of EXT) if (re.test(n.name)) return ic;
-  return '📄';
+  return TYPE_ICON[n.type] || '📄';
 }
+// The largest type groups of a folder, biggest first: [['video', bytes], ...].
+const topTypes = n => Object.entries(n.types || {}).sort((a, b) => b[1] - a[1]);
 const label = n => n.kind === 'rest' ? t('restLabel', { n: num(n.files) }) : n.name;
 const pct = v => t('pct', { p: Math.round(v) });
 
@@ -148,9 +148,10 @@ async function startScan(root) {
   Object.assign(state, { root, path: root, view: null, sel: null, progress: { files: 0, bytes: 0, done: false, elapsed: 0, errors: 0 } });
   state.basket.clear();
   state.quickSizes.clear();
+  state.hl = state.hlPreview = null;
   document.body.classList.add('scanned');
   tm.innerHTML = '';
-  renderDrives(); renderBasket(); renderQuick(); renderStatus(); renderCrumbs();
+  renderDrives(); renderBasket(); renderQuick(); renderStatus(); renderCrumbs(); renderTypes();
   scheduleRefresh(true);
 }
 
@@ -218,9 +219,11 @@ function render(mode) {
     if (v.kind === 'dir' && v.children) draw(v, 0, 0, tm.clientWidth, tm.clientHeight, 0, null);
   }
   marks();
+  highlight();
   if (mode === 'pop') { void tm.offsetWidth; tm.classList.add('play'); }
   if (mode === 'flip') flip(old);
   renderCrumbs();
+  renderTypes();
 }
 
 function draw(node, x, y, w, h, depth, color) {
@@ -278,6 +281,31 @@ function marks() {
     e.classList.toggle('mark-in', !own && !!ancestorInBasket(p));
     e.classList.toggle('sel', state.sel === p);
   }
+}
+
+// ---------- file types ----------
+// One type at a time is lit: its files stay bright, a folder tile is as bright as its share
+// of that type, and everything else fades. One lit type needs no colour key, and it reads
+// the same with any colour vision.
+function highlight() {
+  const type = state.hlPreview || state.hl;
+  tm.classList.toggle('hl', !!type);
+  for (const e of tm.children) {
+    if (!type || e.classList.contains('grp')) { e.style.removeProperty('--o'); continue; }
+    const n = state.nodes.get(e.dataset.path)?.node;
+    const share = !n ? 0 : n.kind === 'file' ? +(n.type === type) : n.kind === 'dir' ? (n.types?.[type] || 0) / (n.size || 1) : 0;
+    e.style.setProperty('--o', (0.12 + 0.88 * share).toFixed(2));
+  }
+}
+
+function renderTypes() {
+  const v = state.view;
+  const list = v && v.kind === 'dir' ? topTypes(v) : [];
+  if (!list.length) { $('types').innerHTML = `<div class="qempty">${t(state.root ? 'typesNone' : 'quickEmpty')}</div>`; return; }
+  const total = v.size || 1;
+  $('types').innerHTML = list.map(([id, size]) => `<div class="titem${state.hl === id ? ' on' : ''}" data-type="${id}" title="${esc(t('typeHint'))}">
+    <div class="row"><span>${TYPE_ICON[id]} ${t('type_' + id)}</span><span class="q-size">${fmtBytes(size)} · ${size / total < 0.005 ? '<' + pct(1) : pct(size / total * 100)}</span></div>
+    <div class="tbar"><div style="width:${Math.max(1, size / total * 100)}%"></div></div></div>`).join('');
 }
 
 function renderCrumbs() {
@@ -344,7 +372,13 @@ function tipHtml(n, parent) {
   const share = n.size / total * 100;
   let h = `<div class="tt">${icon(n)} ${esc(n.name)}</div><div class="tp">${esc(n.path)}</div>
     <div class="kv"><span>${t('size')}</span><span>${fmtBytes(n.size)}</span></div>`;
-  if (n.kind === 'dir') h += `<div class="kv"><span>${t('content')}</span><span>${num(n.items)} ${t('items')} · ${num(n.files)} ${t('files')}</span></div>`;
+  if (n.kind === 'dir') {
+    h += `<div class="kv"><span>${t('content')}</span><span>${num(n.items)} ${t('items')} · ${num(n.files)} ${t('files')}</span></div>`;
+    const top = topTypes(n).filter(([, s]) => s / (n.size || 1) >= 0.01).slice(0, 3);
+    if (top.length) h += `<div class="kv"><span>${t('types')}</span><span>${top.map(([id, s]) => `${TYPE_ICON[id]} ${pct(s / n.size * 100)}`).join(' · ')}</span></div>`;
+  } else {
+    h += `<div class="kv"><span>${t('type')}</span><span>${t('type_' + n.type)}</span></div>`;
+  }
   if (parent && parent.size) h += `<div class="kv"><span>${t('inParent')}</span><span>${pct(n.size / parent.size * 100)}</span></div>`;
   h += `<div class="bar2"><div style="width:${Math.min(100, Math.max(2, share * 3))}%"></div></div>
     <div class="muted small" style="margin-top:4px">${t('ofDisk', { p: share < 0.1 ? '<' + (0.1).toLocaleString(locale()) : share.toLocaleString(locale(), { maximumFractionDigits: 1 }) })}</div>`;
@@ -389,7 +423,7 @@ function toggle(node) {
     const anc = ancestorInBasket(node.path);
     if (anc) { shake(el); toast(t('alreadyInBasket', { name: anc.name })); return; }
     for (const item of [...state.basket.values()]) if (isUnder(item.path, node.path)) state.basket.delete(lower(item.path));
-    state.basket.set(key, { path: node.path, name: node.name, size: node.size, kind: node.kind });
+    state.basket.set(key, { path: node.path, name: node.name, size: node.size, kind: node.kind, type: node.type });
   }
   tip.dataset.for = '';
   marks(); renderBasket(); renderQuick();
@@ -550,6 +584,19 @@ $('quick').addEventListener('click', e => {
   toast(t('addedQuick', { name: t('q_' + q.id), size: fmtBytes(size) }));
 });
 
+$('types').addEventListener('click', e => {
+  const row = e.target.closest('[data-type]');
+  if (!row) return;
+  state.hl = state.hl === row.dataset.type ? null : row.dataset.type;
+  highlight(); renderTypes();
+});
+$('types').addEventListener('mouseover', e => {
+  // The gaps between rows have no type; keep the last one so the map does not flicker.
+  const type = e.target.closest('[data-type]')?.dataset.type;
+  if (type && type !== state.hlPreview) { state.hlPreview = type; highlight(); }
+});
+$('types').addEventListener('mouseleave', () => { state.hlPreview = null; highlight(); });
+
 $('blist').addEventListener('click', async e => {
   const row = e.target.closest('[data-b]');
   if (!row) return;
@@ -651,7 +698,7 @@ Promise.all([api.info(), api.settings()]).then(([i, settings]) => {
 
 function rerenderAll() {
   applyI18n();
-  renderDrives(); renderDriveCards(); renderQuick(); renderBasket(); renderStatus(); renderMenu(state.menu);
+  renderDrives(); renderDriveCards(); renderQuick(); renderBasket(); renderStatus(); renderMenu(state.menu); renderTypes();
   if (state.view) render();
 }
 
