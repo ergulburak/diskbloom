@@ -18,6 +18,7 @@
     <div class="brand"><img class="logo" src="assets/icon.png" alt="">Diskbloom</div>
     <nav class="crumbs" id="crumbs"></nav>
     <div class="spacer"></div>
+    <button class="btn soft sm after-scan" id="findBtn">🔍 <span data-i18n="find"></span></button>
     <div class="status" id="status"></div>
   </header>
 
@@ -48,6 +49,18 @@
         <button class="btn soft hero-pick" data-act="pick">📁 <span data-i18n="pickFolder"></span></button>
       </div>
       <div class="keys" id="keys"></div>
+      <div class="find" id="find">
+        <div class="find-head"><b id="findTitle"></b><button class="find-x" id="findClose" aria-label="Close">✕</button></div>
+        <div class="find-bar">
+          <input id="fText" type="search" spellcheck="false">
+          <select id="fType"></select>
+          <select id="fSize"></select>
+          <select id="fAge"></select>
+          <div class="seg" id="fKind"><button data-kind="files" data-i18n="kindFiles"></button><button data-kind="dirs" data-i18n="kindDirs"></button></div>
+        </div>
+        <div class="find-sum muted small" id="fSum"></div>
+        <div class="find-list" id="fList"></div>
+      </div>
     </section>
 
     <aside class="panel insp">

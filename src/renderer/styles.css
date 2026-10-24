@@ -135,6 +135,36 @@ body:not(.scanned) .after-scan { display: none; }
 .keys { flex: none; padding: 8px 4px 0; color: var(--muted); font-size: 11px; text-align: center; opacity: 0; transition: opacity .4s; }
 .scanned .keys { opacity: 1; }
 
+/* ---------- find panel (covers the map) ---------- */
+.find { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  background: rgba(24, 21, 35, .95); backdrop-filter: blur(18px); border-radius: inherit;
+  opacity: 0; transform: translateY(8px) scale(.99); pointer-events: none; transition: opacity .25s, transform .35s var(--spring); }
+.find.on { opacity: 1; transform: none; pointer-events: auto; }
+.find-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.find-head b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.find-x { border: none; background: rgba(255,255,255,.08); width: 28px; height: 28px; border-radius: 50%; cursor: pointer; }
+.find-x:hover { background: rgba(255,255,255,.14); }
+.find-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.find-bar input, .find-bar select { font: inherit; color: inherit; background: rgba(255,255,255,.07); border: 1px solid var(--line-2);
+  border-radius: 10px; padding: 6px 10px; outline: none; }
+.find-bar input { flex: 1; min-width: 160px; }
+.find-bar input:focus, .find-bar select:focus { border-color: rgba(255,179,208,.6); }
+.find-bar select option { background: #1d1a29; }
+.find-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 3px; margin: 0 -6px; padding: 0 6px; }
+.frow { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 11px; cursor: pointer; transition: background .15s; }
+.frow:hover { background: rgba(255,255,255,.07); }
+.frow.in { background: rgba(255,179,208,.12); }
+.frow .ico { flex: none; width: 20px; text-align: center; }
+.frow .main { flex: 1; min-width: 0; }
+.frow .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frow .p { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frow .dt { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.frow .sz { flex: none; width: 72px; text-align: right; font-variant-numeric: tabular-nums; }
+.frow .act { flex: none; opacity: 0; padding: 2px 6px; border-radius: 7px; transition: opacity .2s, background .2s; }
+.frow:hover .act { opacity: .75; }
+.frow .act:hover { opacity: 1; background: rgba(255,255,255,.12); }
+.frow.locked .act[data-add] { visibility: hidden; }
+
 /* ---------- hero ---------- */
 .hero { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 30px;
   transition: opacity .45s, transform .55s var(--ease); }

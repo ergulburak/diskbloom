@@ -40,6 +40,7 @@ function fmtBytes(b) {
   return Number(s).toLocaleString(locale(), { maximumFractionDigits: 2 }) + ' ' + units[i];
 }
 const secs = ms => (ms / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 }) + ' ' + t('seconds');
+const fmtDate = s => (s ? new Date(s * 1000).toLocaleDateString(locale(), { year: 'numeric', month: 'short', day: 'numeric' }) : '');
 
 // File type groups as the scan tree names them (src/shared/filetypes.js).
 const TYPE_ICON = {
@@ -150,6 +151,7 @@ async function startScan(root) {
   state.basket.clear();
   state.quickSizes.clear();
   state.hl = state.hlPreview = null;
+  closeFind();
   document.body.classList.add('scanned');
   tm.innerHTML = '';
   renderDrives(); renderBasket(); renderQuick(); renderStatus(); renderCrumbs(); renderTypes();
@@ -392,6 +394,8 @@ function tipHtml(n, parent) {
   const share = n.size / total * 100;
   let h = `<div class="tt">${icon(n)} ${esc(n.name)}</div><div class="tp">${esc(n.path)}</div>
     <div class="kv"><span>${t('size')}</span><span>${fmtBytes(n.size)}</span></div>`;
+  const when = n.kind === 'dir' ? n.newest : n.mtime;
+  if (when) h += `<div class="kv"><span>${t(n.kind === 'dir' ? 'lastChange' : 'modified')}</span><span>${fmtDate(when)}</span></div>`;
   if (n.kind === 'dir') {
     h += `<div class="kv"><span>${t('content')}</span><span>${num(n.items)} ${t('items')} · ${num(n.files)} ${t('files')}</span></div>`;
     const top = topTypes(n).filter(([, s]) => s / (n.size || 1) >= 0.01).slice(0, 3);
@@ -583,6 +587,7 @@ async function confirmTrash() {
   refreshQuickSizes();
   const skipped = res.failed.length ? ' · ' + t('skipped', { n: num(res.failed.length) }) : '';
   toast(t('movedToast', { size: fmtBytes(res.bytes) }) + skipped, { label: t('openBin'), fn: () => api.openRecycleBin() });
+  runFind();
 }
 
 // ---------- events ----------
@@ -605,7 +610,7 @@ $('status').addEventListener('click', e => {
   if (b.dataset.act === 'elevate') api.elevate(state.root);
 });
 
-$('crumbs').addEventListener('click', e => { const p = e.target.closest('[data-nav]'); if (p) zoomOut(p.dataset.nav); });
+$('crumbs').addEventListener('click', e => { const p = e.target.closest('[data-nav]'); if (p) { closeFind(); zoomOut(p.dataset.nav); } });
 
 tm.addEventListener('click', e => {
   const el = e.target.closest('[data-path]');
@@ -689,6 +694,7 @@ $('lang').addEventListener('click', e => {
   rerenderAll();
   // The Explorer entry is written in one language; rewrite it in the new one.
   if (state.menu) api.setExplorerMenu(true, t('ctxLabel'));
+  if (find.open) { fillFindSelects(); renderFind(); }
 });
 
 // ---------- Explorer menu ----------
@@ -707,6 +713,16 @@ $('ctxMenu').addEventListener('click', async () => {
 });
 
 document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && state.root && !$('modal').classList.contains('on')) {
+    e.preventDefault();
+    openFind();
+    return;
+  }
+  // Typing in the find panel must not reach the map keys (Space, Delete, E...).
+  if (find.open) {
+    if (e.key === 'Escape') closeFind();
+    return;
+  }
   if ($('modal').classList.contains('on')) {
     if (e.key === 'Escape' && !state.busy) closeModal();
     return;
@@ -743,12 +759,117 @@ api.onProgress(m => {
     clearTimeout(refreshTimer); refreshTimer = null;
     // Fresh free space first: the hidden-space tile compares it with the scanned total.
     loadDrives().then(() => refresh('flip'));
+    runFind();
     refreshQuickSizes();
     if (!m.cancelled && !m.error) toast(`✓ ${t('done')} · ${secs(m.elapsed)} · ${num(m.files)} ${t('files')}`);
     if (m.error) toast('⚠ ' + esc(m.error));
   } else if (!m.done) {
     scheduleRefresh();
   }
+});
+
+// ---------- find ----------
+// Lists the largest files or folders in the open folder that match a filter. With no filter
+// it is the "largest files" list. Results come from the scan tree, so no disk access.
+const DAY = 86400;
+const SIZES = [0, 10 * 2 ** 20, 100 * 2 ** 20, 2 ** 30];
+const AGES = [0, 182, 365, 730, 1825]; // days
+const find = { open: false, kind: 'files', seq: 0, timer: null, result: { items: [], count: 0, size: 0 } };
+
+function fillFindSelects() {
+  const fill = (id, list) => {
+    const was = $(id).value;
+    $(id).innerHTML = list.map(([value, text]) => `<option value="${value}">${esc(text)}</option>`).join('');
+    if (was) $(id).value = was;
+  };
+  fill('fType', [['', t('allTypes')], ...Object.keys(TYPE_ICON).map(id => [id, `${TYPE_ICON[id]} ${t('type_' + id)}`])]);
+  fill('fSize', SIZES.map((s, i) => [i, i ? '≥ ' + fmtBytes(s) : t('anySize')]));
+  fill('fAge', AGES.map((d, i) => [i, i ? t('olderThan_' + d) : t('anyAge')]));
+  $('fText').placeholder = t('findHint');
+  document.querySelectorAll('#fKind button').forEach(b => b.classList.toggle('on', b.dataset.kind === find.kind));
+}
+
+function openFind() {
+  if (!state.root) return;
+  fillFindSelects();
+  find.open = true;
+  hideTip();
+  $('find').classList.add('on');
+  runFind();
+  setTimeout(() => $('fText').focus(), 50);
+}
+function closeFind() { find.open = false; $('find').classList.remove('on'); }
+
+function findFilter() {
+  const days = AGES[+$('fAge').value || 0];
+  return {
+    text: $('fText').value, type: $('fType').value || null, minSize: SIZES[+$('fSize').value || 0],
+    before: days ? Math.floor(Date.now() / 1000) - days * DAY : 0, kind: find.kind, limit: 200,
+  };
+}
+
+async function runFind() {
+  if (!find.open || !state.root) return;
+  const seq = ++find.seq, scope = state.path;
+  $('findTitle').textContent = t('findIn', { name: isDrive(scope) ? scope.replace(/\\$/, '') : baseName(scope) });
+  const r = await api.search(scope, findFilter());
+  if (seq !== find.seq) return;
+  find.result = r || { items: [], count: 0, size: 0 };
+  renderFind();
+}
+
+function renderFind() {
+  const r = find.result;
+  $('fSum').textContent = !r.count ? t('findNone')
+    : t('findSum', { n: num(r.count), size: fmtBytes(r.size) }) + (r.count > r.items.length ? ' · ' + t('findTop', { n: num(r.items.length) }) : '');
+  $('fList').innerHTML = r.items.map((n, i) => {
+    const own = inBasket(n.path);
+    return `<div class="frow${own || ancestorInBasket(n.path) ? ' in' : ''}${n.lock ? ' locked' : ''}" data-i="${i}">
+      <span class="ico">${icon(n)}</span>
+      <div class="main"><div class="nm">${esc(n.name)}</div><div class="p">${esc(parentPath(n.path))}</div></div>
+      <span class="dt">${fmtDate(n.kind === 'dir' ? n.newest : n.mtime)}</span>
+      <span class="sz">${fmtBytes(n.size)}</span>
+      <span class="act" data-add title="${esc(t(own ? 'remove' : 'addToBasket'))}">${own ? '✕' : '+'}</span>
+      <span class="act" data-reveal title="${esc(t('reveal'))}">📂</span></div>`;
+  }).join('');
+}
+
+// Opens a result on the map: a folder itself, or the folder of a file with the file selected.
+async function goTo(n) {
+  const target = n.kind === 'dir' ? n.path : parentPath(n.path);
+  const root = state.root;
+  const v = await api.view(target, 3);
+  if (!v || state.root !== root) return;
+  Object.assign(state, { path: target, view: v, sel: n.kind === 'dir' ? null : n.path });
+  render('pop');
+}
+
+$('findBtn').addEventListener('click', () => (find.open ? closeFind() : openFind()));
+$('findClose').addEventListener('click', closeFind);
+['fType', 'fSize', 'fAge'].forEach(id => $(id).addEventListener('change', runFind));
+$('fText').addEventListener('input', () => { clearTimeout(find.timer); find.timer = setTimeout(runFind, 180); });
+$('fKind').addEventListener('click', e => {
+  const b = e.target.closest('[data-kind]');
+  if (!b) return;
+  find.kind = b.dataset.kind;
+  fillFindSelects();
+  runFind();
+});
+$('fList').addEventListener('click', e => {
+  const row = e.target.closest('[data-i]');
+  if (!row) return;
+  const n = find.result.items[+row.dataset.i];
+  if (e.target.closest('[data-reveal]')) { api.reveal(n.path); return; }
+  if (e.target.closest('[data-add]')) { toggle(n); renderFind(); return; }
+  closeFind();
+  goTo(n);
+});
+$('fList').addEventListener('contextmenu', e => {
+  const row = e.target.closest('[data-i]');
+  if (!row) return;
+  e.preventDefault();
+  toggle(find.result.items[+row.dataset.i]);
+  renderFind();
 });
 
 // ---------- start ----------
