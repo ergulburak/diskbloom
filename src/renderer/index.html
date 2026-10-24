@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+  <title>Diskbloom</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="blobs" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+  <header class="titlebar">
+    <div class="lights">
+      <button data-win="close" aria-label="Close"><svg viewBox="0 0 10 10"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5"/></svg></button>
+      <button data-win="minimize" aria-label="Minimize"><svg viewBox="0 0 10 10"><path d="M2 5h6"/></svg></button>
+      <button data-win="maximize" aria-label="Maximize"><svg viewBox="0 0 10 10"><path d="M5 2v6M2 5h6"/></svg></button>
+    </div>
+    <div class="brand"><img class="logo" src="assets/icon.png" alt="">Diskbloom</div>
+    <nav class="crumbs" id="crumbs"></nav>
+    <div class="spacer"></div>
+    <div class="status" id="status"></div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel side">
+      <div class="lbl" data-i18n="drives"></div>
+      <div class="drives" id="drives"></div>
+      <div class="lbl" data-i18n="quickClean"></div>
+      <div class="quick" id="quick"></div>
+      <div class="side-foot">
+        <div class="seg" id="lang"><button data-lang="tr">TR</button><button data-lang="en">EN</button></div>
+        <span class="muted" id="ver"></span>
+      </div>
+    </aside>
+
+    <section class="panel center">
+      <div class="tm" id="tm"></div>
+      <div class="hero" id="hero">
+        <div class="hero-logo"><img class="logo big" src="assets/icon.png" alt=""></div>
+        <h1>Diskbloom</h1>
+        <p class="muted" data-i18n="tagline"></p>
+        <div class="hero-sub" data-i18n="pickDrive"></div>
+        <div class="drive-cards" id="driveCards"></div>
+      </div>
+      <div class="keys" id="keys"></div>
+    </section>
+
+    <aside class="panel insp">
+      <div class="insp-head"><span class="basket-ico">🧺</span><span class="title" data-i18n="basket"></span><span class="muted" id="bCount"></span></div>
+      <div class="blist" id="blist"></div>
+      <div class="insp-foot">
+        <div class="kv"><span data-i18n="toFree"></span><b class="pink" id="bTotal">0 B</b></div>
+        <div class="meter dual"><div class="after" id="afterMeter"></div><div class="now" id="nowMeter"></div></div>
+        <div class="muted small" id="afterText"></div>
+        <button class="btn pri" id="trashBtn" data-i18n="moveToBin"></button>
+      </div>
+    </aside>
+  </main>
+
+  <div class="ftip" id="tip"></div>
+  <div class="toast" id="toast"></div>
+  <div class="modal" id="modal">
+    <div class="dialog">
+      <div class="dialog-title" data-i18n="confirmTitle"></div>
+      <div class="muted" id="mSub"></div>
+      <ul id="mList"></ul>
+      <div class="dialog-actions"><button class="btn soft" id="mNo" data-i18n="cancel"></button><button class="btn pri" id="mYes" data-i18n="move"></button></div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
