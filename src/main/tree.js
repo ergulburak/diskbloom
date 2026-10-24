@@ -181,6 +181,51 @@ class Tree {
     return { items, count, size };
   }
 
+  /**
+   * Compares this scan with an earlier snapshot ({ size, dirs: { path: size } }) and returns a
+   * new snapshot. A snapshot keeps the folders of at least `minSize`. A change is listed from
+   * `minChange` up, and a folder whose change is mostly (80%) one listed folder inside it is
+   * left out, so the list names the folders where something really happened. `deltas` has the
+   * change of every compared folder by lower-case path.
+   */
+  changes(prev, { minSize = 10 * 2 ** 20, minChange = 50 * 2 ** 20, limit = 100 } = {}) {
+    const dirs = {};
+    const walk = (dir, path) => {
+      if (dir.size < minSize) return;
+      dirs[path] = dir.size;
+      for (const s of dir.subdirs) walk(s, (dir.parent ? path + '\\' : this.rootPath) + s.name);
+    };
+    walk(this.root, this.rootView);
+    const snapshot = { size: this.root.size, dirs };
+    if (!prev || !prev.dirs) return { snapshot, diff: null };
+
+    const before = new Map(Object.entries(prev.dirs).map(([p, s]) => [p.toLowerCase(), { p, s }]));
+    const now = new Map(Object.entries(dirs).map(([p, s]) => [p.toLowerCase(), { p, s }]));
+    const sizeNow = key => {
+      if (now.has(key)) return now.get(key).s;
+      const hit = this.find(key);
+      return hit && hit.index === undefined ? hit.dir.size : 0;
+    };
+    const deltas = {};
+    for (const key of new Set([...before.keys(), ...now.keys()])) {
+      const delta = sizeNow(key) - (before.get(key)?.s || 0);
+      if (delta) deltas[key] = delta;
+    }
+    // The root's own change is the summary (after - before), so it is not a list item.
+    const rootKey = this.rootView.toLowerCase();
+    const big = Object.keys(deltas).filter(k => k !== rootKey && Math.abs(deltas[k]) >= minChange);
+    const kept = big.filter(a => !big.some(d => d !== a && d.startsWith(a.replace(/\\$/, '') + '\\')
+      && Math.sign(deltas[d]) === Math.sign(deltas[a]) && Math.abs(deltas[d]) >= 0.8 * Math.abs(deltas[a])));
+    kept.sort((a, b) => Math.abs(deltas[b]) - Math.abs(deltas[a]));
+    const items = kept.slice(0, limit).map(key => {
+      const hit = this.find(key);
+      const path = (now.get(key) || before.get(key)).p;
+      const node = hit && hit.index === undefined ? this.dirNode(hit.dir, 0) : { kind: 'gone', name: path.split('\\').pop(), path, size: 0 };
+      return { ...node, before: before.get(key)?.s || 0, delta: deltas[key] };
+    });
+    return { snapshot, diff: { before: prev.size, after: this.root.size, items, deltas } };
+  }
+
   /** Full paths of everything directly inside a folder. */
   childPaths(p) {
     const hit = this.find(p);

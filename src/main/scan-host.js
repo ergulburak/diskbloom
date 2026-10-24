@@ -23,6 +23,7 @@ port.on('message', e => {
     case 'remove': reply(m.id, tree ? tree.removeMany(m.paths) : []); break;
     case 'children': reply(m.id, tree ? tree.childPaths(m.path) : []); break;
     case 'search': reply(m.id, tree ? tree.search(m.path, m.filter) : null); break;
+    case 'changes': reply(m.id, tree && current && current.done && !current.cancelled && !current.error ? tree.changes(m.prev) : null); break;
   }
 });
 

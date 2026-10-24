@@ -191,6 +191,20 @@ ipcMain.handle('dialog:folder', async () => {
 ipcMain.handle('scan:cancel', () => { if (host) host.postMessage({ type: 'cancel' }); });
 ipcMain.handle('tree:view', (_e, p, depth) => ask({ type: 'view', path: p, depth }));
 ipcMain.handle('tree:search', (_e, p, filter) => ask({ type: 'search', path: p, filter }));
+
+// After a complete scan: compare it with the snapshot of the previous scan of the same root,
+// then keep this scan's snapshot for next time. Returns null for a first scan.
+const snapshotFile = root => path.join(app.getPath('userData'), 'snapshots', encodeURIComponent(root.toLowerCase()) + '.json');
+ipcMain.handle('scan:changes', async (_e, root) => {
+  if (DEMO || typeof root !== 'string') return null;
+  let prev = null;
+  try { prev = JSON.parse(await fs.promises.readFile(snapshotFile(root), 'utf8')); } catch { /* first scan of this root */ }
+  const r = await ask({ type: 'changes', prev });
+  if (!r) return null;
+  await fs.promises.mkdir(path.dirname(snapshotFile(root)), { recursive: true });
+  await fs.promises.writeFile(snapshotFile(root), JSON.stringify({ root, time: Date.now(), ...r.snapshot }));
+  return r.diff && prev ? { since: prev.time, ...r.diff } : null;
+});
 ipcMain.handle('items:trash', (_e, items) => trashItems(items));
 ipcMain.handle('shell:reveal', (_e, p) => { if (!DEMO) shell.showItemInFolder(p); });
 ipcMain.handle('shell:recycleBin', () => {
