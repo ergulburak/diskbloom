@@ -183,12 +183,13 @@ class Tree {
 
   /**
    * Compares this scan with an earlier snapshot ({ size, dirs: { path: size } }) and returns a
-   * new snapshot. A snapshot keeps the folders of at least `minSize`. A change is listed from
+   * new snapshot. A snapshot keeps the folders of at least `minSize`, so a folder missing from
+   * the earlier one was smaller than that (or did not exist). A change is listed from
    * `minChange` up, and a folder whose change is mostly (80%) one listed folder inside it is
    * left out, so the list names the folders where something really happened. `deltas` has the
    * change of every compared folder by lower-case path.
    */
-  changes(prev, { minSize = 10 * 2 ** 20, minChange = 50 * 2 ** 20, limit = 100 } = {}) {
+  changes(prev, { minSize = 2 ** 20, minChange = 50 * 2 ** 20, limit = 100 } = {}) {
     const dirs = {};
     const walk = (dir, path) => {
       if (dir.size < minSize) return;

@@ -776,7 +776,7 @@ api.onProgress(m => {
         state.changes = c;
         if (c && c.items.length) toast(done + ' · ' + t('sinceLast', { delta: fmtDelta(c.after - c.before) }), { label: t('showChanges'), fn: () => openFind('changes') });
         if (find.open && find.kind === 'changes') runFind();
-      });
+      }).catch(() => { /* no comparison this time; the scan itself is fine */ });
     }
     if (m.error) toast('⚠ ' + esc(m.error));
   } else if (!m.done) {
@@ -859,7 +859,7 @@ function renderFind() {
     return `<div class="frow${own || ancestorInBasket(n.path) ? ' in' : ''}${n.lock || n.kind === 'gone' ? ' locked' : ''}${n.kind === 'gone' ? ' gone' : ''}" data-i="${i}">
       <span class="ico">${icon(n)}</span>
       <div class="main"><div class="nm">${esc(n.name)}</div><div class="p">${esc(parentPath(n.path))}</div></div>
-      <span class="dt">${changes ? (n.before ? t('wasSize', { size: fmtBytes(n.before) }) : t('newFolder')) :fmtDate(n.kind === 'dir' ? n.newest : n.mtime)}</span>
+      <span class="dt">${changes ? (n.before ? t('wasSize', { size: fmtBytes(n.before) }) : t('wasSmall')) : fmtDate(n.kind === 'dir' ? n.newest : n.mtime)}</span>
       <span class="sz">${changes ? fmtDelta(n.delta) : fmtBytes(n.size)}</span>
       <span class="act" data-add title="${esc(t(own ? 'remove' : 'addToBasket'))}">${own ? '✕' : '+'}</span>
       <span class="act" data-reveal title="${esc(t('reveal'))}">📂</span></div>`;
