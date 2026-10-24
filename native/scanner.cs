@@ -43,6 +43,9 @@ static class Scanner
     const uint ATTR_DIRECTORY = 0x10;
     const uint ATTR_REPARSE_POINT = 0x400;
     const uint NAME_SURROGATE = 0x20000000; // reparse tag bit: the entry points somewhere else
+    // OFFLINE, RECALL_ON_OPEN and RECALL_ON_DATA_ACCESS: the data is not on this disk.
+    const uint ATTR_CLOUD_ONLY = 0x1000 | 0x40000 | 0x400000;
+    const int ERROR_FILE_NOT_FOUND = 2;
     static readonly IntPtr INVALID = new IntPtr(-1);
 
     struct Job { public int Id; public string Path; }
@@ -103,7 +106,12 @@ static class Scanner
         string pattern = @"\\?\" + job.Path + "*";
         WIN32_FIND_DATAW fd;
         IntPtr h = FindFirstFileExW(pattern, FindExInfoBasic, out fd, 0, IntPtr.Zero, FIND_FIRST_EX_LARGE_FETCH);
-        if (h == INVALID) { sb.Append("E\t").Append(job.Id).Append('\n'); return; }
+        if (h == INVALID)
+        {
+            // An empty drive root (FAT32, exFAT) has no "." entry, so the search finds nothing. That is not an error.
+            if (Marshal.GetLastWin32Error() != ERROR_FILE_NOT_FOUND) sb.Append("E\t").Append(job.Id).Append('\n');
+            return;
+        }
         try
         {
             do
@@ -123,6 +131,8 @@ static class Scanner
                 else
                 {
                     long size = ((long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                    // Cloud-only files (OneDrive "online-only" placeholders) use no space on this disk.
+                    if ((fd.dwFileAttributes & ATTR_CLOUD_ONLY) != 0) size = 0;
                     // FILETIME counts 100 ns steps from 1601; Unix seconds count from 1970.
                     long mtime = Math.Max(0L, fd.ftLastWriteTime / 10000000L - 11644473600L);
                     sb.Append("F\t").Append(job.Id).Append('\t').Append(size).Append('\t').Append(name).Append('\t').Append(mtime).Append('\n');
