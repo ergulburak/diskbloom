@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('diskbloom', {
   scan: root => ipcRenderer.invoke('scan:start', root),
   cancelScan: () => ipcRenderer.invoke('scan:cancel'),
   pickFolder: () => ipcRenderer.invoke('dialog:folder'),
+  explorerMenu: () => ipcRenderer.invoke('menu:get'),
+  setExplorerMenu: (on, label) => ipcRenderer.invoke('menu:set', on, label),
   view: (path, depth) => ipcRenderer.invoke('tree:view', path, depth),
   trash: items => ipcRenderer.invoke('items:trash', items),
   reveal: path => ipcRenderer.invoke('shell:reveal', path),

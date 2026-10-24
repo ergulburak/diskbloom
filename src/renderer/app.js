@@ -19,6 +19,7 @@ const state = {
   basket: new Map(),   // lower-case path -> { path, name, size, kind, contents }
   progress: null,
   busy: false,
+  menu: null,          // Explorer menu entry: true / false, or null where it is not offered
 };
 
 // ---------- helpers ----------
@@ -429,7 +430,8 @@ function toast(html, action) {
   el.classList.add('on');
   if (action) $('toastAct').onclick = () => { action.fn(); el.classList.remove('on'); };
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('on'), action ? 7000 : 2600);
+  // Long messages stay up longer so they can be read.
+  toastTimer = setTimeout(() => el.classList.remove('on'), action ? 7000 : Math.max(2600, html.length * 45));
 }
 
 async function openModal() {
@@ -574,6 +576,23 @@ $('lang').addEventListener('click', e => {
   setLang(b.dataset.lang);
   api.saveSettings({ lang: getLang() });
   rerenderAll();
+  // The Explorer entry is written in one language; rewrite it in the new one.
+  if (state.menu) api.setExplorerMenu(true, t('ctxLabel'));
+});
+
+// ---------- Explorer menu ----------
+function renderMenu(on) {
+  state.menu = on;
+  $('ctxMenu').hidden = on === null;
+  $('ctxMenu').classList.toggle('on', !!on);
+  $('ctxMenu').title = t('explorerMenuHint');
+}
+$('ctxMenu').addEventListener('click', async () => {
+  const want = !state.menu;
+  const on = await api.setExplorerMenu(want, t('ctxLabel'));
+  renderMenu(on);
+  if (want && on) toast('🖱️ ' + t('menuOn'));
+  else if (want) toast('⚠ ' + t('menuFailed'));
 });
 
 document.addEventListener('keydown', e => {
@@ -594,6 +613,7 @@ window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer
 
 document.querySelectorAll('[data-act="pick"]').forEach(b => b.addEventListener('click', async () => requestScan(await api.pickFolder())));
 api.onScanRequest(requestScan);
+api.explorerMenu().then(renderMenu);
 
 api.onTrashProgress(m => {
   if (state.busy) $('mYes').textContent = `${t('moving')} ${num(m.done)} / ${num(m.total)}`;
@@ -631,7 +651,7 @@ Promise.all([api.info(), api.settings()]).then(([i, settings]) => {
 
 function rerenderAll() {
   applyI18n();
-  renderDrives(); renderDriveCards(); renderQuick(); renderBasket(); renderStatus();
+  renderDrives(); renderDriveCards(); renderQuick(); renderBasket(); renderStatus(); renderMenu(state.menu);
   if (state.view) render();
 }
 

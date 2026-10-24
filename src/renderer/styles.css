@@ -102,6 +102,16 @@ kbd { font: inherit; font-size: 10.5px; padding: 1px 6px; border-radius: 6px; bo
 .qitem.in { color: #ffc4da; }
 .qitem.zero { opacity: .4; cursor: default; }
 .qempty { padding: 6px 9px; color: var(--muted); }
+.menu-row { margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 10px;
+  cursor: pointer; color: var(--muted); transition: background .2s, color .2s; }
+.menu-row[hidden] { display: none; }
+.menu-row:hover { background: rgba(255,255,255,.07); }
+.menu-row.on { color: inherit; }
+.switch { flex: none; width: 28px; height: 16px; border-radius: 999px; background: rgba(255,255,255,.14); position: relative; transition: background .25s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .3s var(--spring); }
+.menu-row.on .switch { background: var(--grad); }
+.menu-row.on .switch::after { transform: translateX(12px); }
+.menu-row:not([hidden]) + .side-foot { margin-top: 0; }
 .side-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 6px 4px 0; }
 .seg { display: flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.06); }
 .seg button { border: none; background: none; padding: 3px 10px; border-radius: 999px; cursor: pointer; color: var(--muted); transition: background .2s, color .2s; }

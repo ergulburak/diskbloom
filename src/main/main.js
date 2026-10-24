@@ -7,6 +7,7 @@ const path = require('node:path');
 const { lockReason } = require('../shared/protect');
 const { DEMO_DRIVES, DEMO_QUICK } = require('./demo');
 const { scanArg, resolveRoot } = require('./launch');
+const explorerMenu = require('./explorer-menu');
 
 // --demo shows a made-up drive and never touches the disk (for screenshots and talks).
 const DEMO = process.argv.includes('--demo') || !!process.env.DISKBLOOM_DEMO;
@@ -209,8 +210,8 @@ ipcMain.handle('app:info', () => ({
 // administrator rights are counted too.
 ipcMain.handle('app:elevate', (_e, root) => {
   if (DEMO) return;
-  const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
-  const args = (app.isPackaged ? [] : [app.getAppPath()]).concat(root ? [`--scan=${root.replace(/[\\/]+$/, '')}`] : []);
+  const { exe, appPath } = launchTarget();
+  const args = (appPath ? [appPath] : []).concat(root ? [`--scan=${root.replace(/[\\/]+$/, '')}`] : []);
   const quote = s => `'${String(s).replace(/'/g, "''")}'`;
   const list = args.length ? ` -ArgumentList ${args.map(a => quote(`"${a}"`)).join(',')}` : '';
   // The elevated copy must get the single-instance lock, so this one lets it go first.
@@ -221,6 +222,36 @@ ipcMain.handle('app:elevate', (_e, root) => {
     else if (SINGLE) app.requestSingleInstanceLock(); // UAC was cancelled; stay the only window
   });
 });
+
+// What starts this app again: the portable .exe (not its temporary unpacked copy), the
+// installed .exe, or electron.exe with the source folder during development.
+function launchTarget() {
+  return app.isPackaged
+    ? { exe: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, appPath: null }
+    : { exe: process.execPath, appPath: app.getAppPath() };
+}
+
+const menuSupported = () => process.platform === 'win32' && !DEMO;
+ipcMain.handle('menu:get', async () => menuSupported() ? (await explorerMenu.status()).on : null);
+ipcMain.handle('menu:set', async (_e, on, label) => {
+  if (!menuSupported()) return null;
+  if (on) {
+    const { exe, appPath } = launchTarget();
+    await explorerMenu.enable(exe, appPath, String(label || 'Diskbloom'));
+  } else {
+    await explorerMenu.disable();
+  }
+  return (await explorerMenu.status()).on;
+});
+
+// A portable .exe can be moved; point an existing menu entry at where this copy is now.
+// Only a packaged app does this, so a development run never takes the entry over.
+async function refreshMenu() {
+  if (!menuSupported() || !app.isPackaged) return;
+  const s = await explorerMenu.status();
+  const { exe, appPath } = launchTarget();
+  if (s.on && s.command !== explorerMenu.menuCommand(exe, appPath)) await explorerMenu.enable(exe, appPath, s.label || 'Diskbloom');
+}
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 function readSettings() {
@@ -259,6 +290,7 @@ if (SINGLE && !app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     startHost();
     createWindow();
+    refreshMenu();
   });
 }
 app.on('window-all-closed', () => {
