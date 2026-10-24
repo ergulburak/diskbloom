@@ -21,6 +21,11 @@ function resolveRoot(p) {
   let full = p.trim();
   if (/^[a-z]:$/i.test(full)) full += '\\';
   if (!/^[a-z]:[\\/]/i.test(full)) return null;
+  // A drive root stays as it is: realpath turns a subst or mapped network drive into its
+  // target, but the drive list shows it by its letter and the scan works on the letter.
+  if (/^[a-z]:[\\/]$/i.test(full)) {
+    try { return fs.statSync(full).isDirectory() ? full.slice(0, 2).toUpperCase() + '\\' : null; } catch { return null; }
+  }
   try {
     full = fs.realpathSync.native(path.resolve(full));
     if (!fs.statSync(full).isDirectory()) return null;
